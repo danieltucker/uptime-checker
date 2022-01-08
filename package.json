@@ -1,0 +1,19 @@
+{
+  "name": "uptime-checker",
+  "version": "1.0.0",
+  "description": "site and api checker",
+  "main": "app.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danieltucker/uptime-checker.git"
+  },
+  "author": "Daniel Tucker",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/danieltucker/uptime-checker/issues"
+  },
+  "homepage": "https://github.com/danieltucker/uptime-checker#readme"
+}
