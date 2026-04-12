@@ -1,6 +1,6 @@
 import React from 'react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
-import { Edit2, Trash2, Tag, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Edit2, Trash2, Tag, ShieldCheck, ShieldAlert, Code } from 'lucide-react';
 import { formatInterval, formatTimestamp, certDaysColor } from '../types/monitor';
 import { useTheme } from '../hooks/useTheme';
 
@@ -194,7 +194,7 @@ function CheckTypeBadge({ checkType }) {
 // MonitorCard
 // ---------------------------------------------------------------------------
 
-export function MonitorCard({ monitor, onEdit, onDelete, compact = false }) {
+export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = false }) {
   const { t } = useTheme();
 
   const chartData = monitor.history.map((h, i) => ({
@@ -294,28 +294,35 @@ export function MonitorCard({ monitor, onEdit, onDelete, compact = false }) {
             {monitor.label}
           </span>
         </div>
-        {(onEdit || onDelete) && (
-          <div className="flex items-center gap-1 shrink-0">
-            {onEdit && (
-              <button onClick={() => onEdit(monitor)} title="Edit"
-                className="p-1.5 rounded transition-colors"
-                style={{ color: t.textFaint }}
-                onMouseEnter={e => e.currentTarget.style.color = t.textPrimary}
-                onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
-                <Edit2 size={13} />
-              </button>
-            )}
-            {onDelete && (
-              <button onClick={() => onDelete(monitor.id)} title="Delete"
-                className="p-1.5 rounded transition-colors"
-                style={{ color: t.textFaint }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.backgroundColor = 'rgba(248,113,113,0.1)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = t.textFaint; e.currentTarget.style.backgroundColor = ''; }}>
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {onEmbed && (
+            <button onClick={() => onEmbed(monitor)} title="Embed"
+              className="p-1.5 rounded transition-colors"
+              style={{ color: t.textFaint }}
+              onMouseEnter={e => e.currentTarget.style.color = t.textPrimary}
+              onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+              <Code size={13} />
+            </button>
+          )}
+          {onEdit && (
+            <button onClick={() => onEdit(monitor)} title="Edit"
+              className="p-1.5 rounded transition-colors"
+              style={{ color: t.textFaint }}
+              onMouseEnter={e => e.currentTarget.style.color = t.textPrimary}
+              onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+              <Edit2 size={13} />
+            </button>
+          )}
+          {onDelete && (
+            <button onClick={() => onDelete(monitor.id)} title="Delete"
+              className="p-1.5 rounded transition-colors"
+              style={{ color: t.textFaint }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.backgroundColor = 'rgba(248,113,113,0.1)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = t.textFaint; e.currentTarget.style.backgroundColor = ''; }}>
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Target + description */}

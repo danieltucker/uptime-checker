@@ -3,13 +3,18 @@
  * Each tick fetches the latest monitor config from DB (so edits take effect
  * on the next check without restarting the server) then runs the appropriate
  * checker and persists + broadcasts the result.
+ *
+ * Alert state is tracked in memory. On server startup it is seeded from the
+ * last known check result so a restart doesn't re-fire stale alerts.
  */
 
 import { db, rowToMonitor } from './db/index.js';
 import { runCheck }         from './checkers/index.js';
 import { broadcast }        from './sse.js';
+import { dispatchAlerts }   from './alerter.js';
 
-const timers = new Map(); // monitorId → NodeJS.Timer
+const timers      = new Map(); // monitorId → NodeJS.Timer
+const alertStates = new Map(); // monitorId → 'up' | 'down' | null
 
 // ── Core check execution ──────────────────────────────────────────────────────
 
@@ -17,7 +22,7 @@ export async function executeCheck(monitor) {
   const result    = await runCheck(monitor);
   const checkedAt = new Date().toISOString();
 
-  // Persist result to check_history
+  // Persist result
   db.prepare(`
     INSERT INTO check_history
       (monitor_id, checked_at, status, total_ms, dns_ms, tcp_ms,
@@ -39,7 +44,7 @@ export async function executeCheck(monitor) {
     error:      result.error      ?? null,
   });
 
-  // Rolling uptime % from the last 50 results
+  // Rolling uptime % from the last 50 results (used for SSE payload)
   const history = db.prepare(`
     SELECT status FROM check_history
     WHERE monitor_id = ?
@@ -47,12 +52,21 @@ export async function executeCheck(monitor) {
     LIMIT 50
   `).all(monitor.id);
 
-  const upCount      = history.filter(h => h.status === 'up').length;
+  const upCount       = history.filter(h => h.status === 'up').length;
   const uptimePercent = history.length
     ? Math.round((upCount / history.length) * 1000) / 10
     : 100;
 
-  // Push real-time update to all connected browser clients via SSE
+  // Alert dispatch — fire on first DOWN, fire again on RECOVERY
+  const prev = alertStates.get(monitor.id);
+  if (result.status === 'down' && prev !== 'down') {
+    dispatchAlerts(monitor, 'down').catch(console.error);
+  } else if (result.status === 'up' && prev === 'down') {
+    dispatchAlerts(monitor, 'recovered').catch(console.error);
+  }
+  alertStates.set(monitor.id, result.status);
+
+  // Push real-time update to all connected browsers
   broadcast('monitor:checked', {
     id:           monitor.id,
     status:       result.status,
@@ -68,11 +82,10 @@ export async function executeCheck(monitor) {
       httpStatus: result.httpStatus ?? null,
       certDays:   result.certDays   ?? null,
     },
-    // New history point to append on the client
     newPoint: {
-      timestamp:  checkedAt,
-      ping:       result.totalMs ?? null,
-      status:     result.status,
+      timestamp: checkedAt,
+      ping:      result.totalMs ?? null,
+      status:    result.status,
     },
   });
 
@@ -82,31 +95,33 @@ export async function executeCheck(monitor) {
 // ── Scheduling ────────────────────────────────────────────────────────────────
 
 export function scheduleMonitor(id, intervalSeconds) {
-  stopMonitor(id); // clear any existing timer
+  stopMonitor(id);
 
   const tick = async () => {
-    // Re-fetch config each tick so edits (target, interval change, etc.) apply immediately
     const row = db.prepare('SELECT * FROM monitors WHERE id = ?').get(id);
-    if (!row) { stopMonitor(id); return; } // deleted while running
+    if (!row) { stopMonitor(id); return; }
     await executeCheck(rowToMonitor(row));
   };
 
-  tick(); // immediate first check — card gets live data right away
+  tick();
   timers.set(id, setInterval(tick, intervalSeconds * 1000));
 }
 
 export function stopMonitor(id) {
   const timer = timers.get(id);
-  if (timer) {
-    clearInterval(timer);
-    timers.delete(id);
-  }
+  if (timer) { clearInterval(timer); timers.delete(id); }
 }
 
-/** Called once at server startup — restores schedules for all persisted monitors. */
+/** Restore schedules on startup. Seeds alert state from last known check so
+ *  a server restart doesn't re-trigger alerts for already-down monitors. */
 export function initScheduler() {
   const monitors = db.prepare('SELECT * FROM monitors').all().map(rowToMonitor);
   for (const m of monitors) {
+    const last = db.prepare(`
+      SELECT status FROM check_history
+      WHERE monitor_id = ? ORDER BY checked_at DESC LIMIT 1
+    `).get(m.id);
+    alertStates.set(m.id, last?.status ?? null);
     scheduleMonitor(m.id, m.interval);
   }
   console.log(`[scheduler] ${monitors.length} monitor(s) scheduled`);

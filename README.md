@@ -9,7 +9,7 @@ Under the hood it makes real HTTP(S), TCP, and ICMP checks on configurable inter
 The whole stack ships as a single Docker Compose service - build, run, and forget. SQLite data is mounted on a named volume so check history survives container restarts.
 
 ![Status: Active](https://img.shields.io/badge/status-active-green)
-![Version](https://img.shields.io/badge/version-2.0-blue)
+![Version](https://img.shields.io/badge/version-3.0-blue)
 
 ![WatchTower dashboard screenshot](screenshot.png)
 
@@ -30,26 +30,85 @@ The whole stack ships as a single Docker Compose service - build, run, and forge
 - **Tag filtering** - filter the dashboard grid by one or more tags; multiple tags use OR logic
 - **Tag autocomplete** - the tag input suggests existing tags as you type and lets you create new ones
 - **Edit / Delete** - update any monitor config; changes take effect on the next check
-- **Alert type tagging** - Email / SMS / Webhook dispatch (coming soon)
 - **Alerts panel** - bell icon shows active and resolved outage alerts; ongoing alerts display a live elapsed-time counter; dismissed individually or all at once; persists across reloads
 - **Network Reference section** - Google, Cloudflare (1.1.1.1), Google DNS (8.8.8.8), and Cloudflare.com are auto-seeded on first run and shown in a compact strip at the bottom of the dashboard to help distinguish app-level failures from network-level ones
+- **Alert notifications** - Telegram (free), Email via SMTP, and SMS via Twilio; configure credentials in the Settings panel; per-monitor alert type selection; test each channel before saving
+- **Embeddable views** - embed any individual monitor as a 360x230 iframe widget, or embed the full read-only dashboard; copy the iframe code from the embed button on any card or in the header; embedded views receive live SSE updates and have no edit, delete, or settings controls
 - **Dark / Light theme** - toggle with the sun/moon button in the header; preference persists in localStorage
-- **Persistent storage** - all monitors and check history survive restarts (SQLite)
+- **Persistent storage** - all monitors, check history, and alert settings survive restarts (SQLite)
+
+## Alert Notifications
+
+Open the Settings panel (gear icon in the header) to configure alert channels. You can test each channel before saving - credentials are sent with the test request so you don't need to save first.
+
+### Telegram (free)
+
+1. Message `@BotFather` on Telegram and create a new bot to get a token
+2. Message your bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` to find your chat ID
+3. Paste the token and chat ID into the Telegram section and enable the channel
+
+### Email (SMTP)
+
+Works with any SMTP relay - Gmail (use an App Password, not your account password), Brevo, Resend, or a self-hosted relay.
+
+| Field | Example |
+|-------|---------|
+| SMTP Host | `smtp.gmail.com` |
+| Port | `587` (STARTTLS) or `465` (SSL) |
+| Username | your email address |
+| Password | Gmail App Password or relay API key |
+| From | the sending address |
+| To | where alerts should land |
+
+### SMS via Twilio (paid)
+
+Requires a Twilio account and a purchased phone number (~$0.008/message).
+
+Paste your Account SID, Auth Token, and both phone numbers (E.164 format, e.g. `+15551234567`) into the Twilio section.
+
+## Embedding
+
+Click the `<>` icon on any monitor card to get iframe code for that monitor widget, or click the `<>` button in the header for the full read-only dashboard.
+
+```html
+<!-- Single monitor widget (360x230) -->
+<iframe
+  src="https://your-watchtower-host/embed/monitor/MONITOR_ID"
+  width="360"
+  height="230"
+  frameborder="0"
+  style="border-radius:8px;overflow:hidden"
+></iframe>
+
+<!-- Full dashboard -->
+<iframe
+  src="https://your-watchtower-host/embed"
+  width="100%"
+  height="600"
+  frameborder="0"
+  style="border-radius:8px;overflow:hidden"
+></iframe>
+```
+
+Embedded views receive live updates via SSE and have no edit, delete, or settings controls.
 
 ## Tech Stack
 
-| Layer       | Library / Tool                        |
-|-------------|---------------------------------------|
-| UI          | React 18 (hooks + context)            |
-| Styling     | Tailwind CSS (CDN play script)        |
-| Charts      | recharts `AreaChart`                  |
-| Icons       | lucide-react                          |
-| Bundler     | Vite 5                                |
-| Backend     | Node.js 20 + Express 4                |
-| Database    | SQLite via better-sqlite3 (WAL mode)  |
-| HTTP checks | got 13                                |
-| Real-time   | Server-Sent Events (EventSource API)  |
-| Container   | Docker + Docker Compose               |
+| Layer         | Library / Tool                        |
+|---------------|---------------------------------------|
+| UI            | React 18 (hooks + context)            |
+| Styling       | Tailwind CSS (CDN play script)        |
+| Charts        | recharts `AreaChart`                  |
+| Icons         | lucide-react                          |
+| Bundler       | Vite 5                                |
+| Backend       | Node.js 20 + Express 4                |
+| Database      | SQLite via better-sqlite3 (WAL mode)  |
+| HTTP checks   | got 13                                |
+| Real-time     | Server-Sent Events (EventSource API)  |
+| Email alerts  | nodemailer 8                          |
+| SMS alerts    | Twilio REST API (via got)             |
+| Chat alerts   | Telegram Bot API (via got)            |
+| Container     | Docker + Docker Compose               |
 
 ## Getting Started
 
@@ -89,15 +148,18 @@ npm run build
 
 ## API
 
-| Method | Path                      | Description                    |
-|--------|---------------------------|--------------------------------|
-| GET    | `/api/monitors`           | List all monitors with history |
-| GET    | `/api/monitors/:id`       | Get a single monitor           |
-| POST   | `/api/monitors`           | Create a monitor               |
-| PUT    | `/api/monitors/:id`       | Update a monitor               |
-| DELETE | `/api/monitors/:id`       | Delete a monitor               |
-| POST   | `/api/monitors/:id/check` | Trigger an immediate check     |
-| GET    | `/api/events`             | SSE stream of check results    |
+| Method | Path                          | Description                            |
+|--------|-------------------------------|----------------------------------------|
+| GET    | `/api/monitors`               | List all monitors with history         |
+| GET    | `/api/monitors/:id`           | Get a single monitor                   |
+| POST   | `/api/monitors`               | Create a monitor                       |
+| PUT    | `/api/monitors/:id`           | Update a monitor                       |
+| DELETE | `/api/monitors/:id`           | Delete a monitor                       |
+| POST   | `/api/monitors/:id/check`     | Trigger an immediate check             |
+| GET    | `/api/events`                 | SSE stream of check results            |
+| GET    | `/api/settings`               | Get alert channel configuration        |
+| PUT    | `/api/settings`               | Save alert channel configuration       |
+| POST   | `/api/settings/test/:channel` | Send a test alert (`telegram`, `email`, `twilio`) |
 
 ### Monitor fields
 
@@ -109,7 +171,7 @@ npm run build
 | `checkType`   | `http`\|`tcp`\|`icmp` | Check strategy                                   |
 | `interval`    | number (seconds)      | How often to run checks (default: 60)            |
 | `port`        | number                | Required for TCP checks                          |
-| `alertTypes`  | string[]              | `Email`, `SMS`, `Webhook`, or `None`             |
+| `alertTypes`  | string[]              | `Email`, `SMS`, `Telegram`, `Webhook`, or `None` |
 | `tags`        | string[]              | Freeform grouping labels; `_ref` is reserved for built-in reference monitors |
 
 ## Project Structure
@@ -121,7 +183,7 @@ uptime-checker/
 ├── index.html                       # Tailwind CDN, dark body background
 ├── vite.config.js
 ├── src/                             # React frontend
-│   ├── main.jsx                     # Entry point, wraps app in ThemeProvider
+│   ├── main.jsx                     # Entry point, embed path detection, ThemeProvider
 │   ├── App.jsx                      # Root layout, tag filter, alerts, reference seeding
 │   ├── types/
 │   │   └── monitor.js               # Monitor schema + formatters
@@ -132,22 +194,27 @@ uptime-checker/
 │       ├── SummaryBar.jsx           # Aggregate stats bar
 │       ├── MonitorCard.jsx          # Monitor card, graphical tooltip, compact mode
 │       ├── MonitorForm.jsx          # Add / Edit modal with tag autocomplete
-│       └── AlertsPanel.jsx          # Dismissable outage alert panel
+│       ├── AlertsPanel.jsx          # Dismissable outage alert panel
+│       ├── SettingsPanel.jsx        # Slide-out alert channel configuration
+│       ├── EmbedModal.jsx           # iframe code generator (widget + full dashboard)
+│       └── EmbedView.jsx            # Read-only embed routes (/embed, /embed/monitor/:id)
 └── server/                          # Node.js backend
     ├── package.json
     └── src/
         ├── server.js                # Express app + static serving
-        ├── scheduler.js             # setInterval per monitor, persists results
+        ├── scheduler.js             # setInterval per monitor, alert state machine
+        ├── alerter.js               # Telegram / Email / Twilio dispatch
         ├── sse.js                   # SSE broadcast to connected clients
         ├── db/
-        │   └── index.js             # SQLite schema + migrations (better-sqlite3)
+        │   └── index.js             # SQLite schema, migrations, settings helpers
         ├── checkers/
         │   ├── index.js             # Dispatcher (http / tcp / icmp)
         │   ├── http.js              # got-based HTTP check with timing breakdown
         │   ├── tcp.js               # TCP port reachability
         │   └── icmp.js              # ICMP ping (requires NET_RAW capability)
         └── routes/
-            └── monitors.js          # CRUD endpoints + manual trigger
+            ├── monitors.js          # CRUD endpoints + manual trigger + windowed history
+            └── settings.js          # Alert channel config + test endpoints
 ```
 
 ## License

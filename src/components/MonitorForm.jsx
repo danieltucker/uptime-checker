@@ -317,28 +317,22 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
             </Field>
           </div>
 
-          {/* Alert types — coming soon */}
-          <Field label="Alert Types" t={t}>
-            <div className="rounded-lg border px-3 py-3 space-y-2.5"
-              style={{ borderColor: t.tagBorder, backgroundColor: t.tagBg }}>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full border"
-                  style={{ color: '#f59e0b', borderColor: 'rgba(245,158,11,0.4)', backgroundColor: 'rgba(245,158,11,0.1)' }}>
-                  Coming soon
-                </span>
-                <span className="text-xs font-mono" style={{ color: t.textMuted }}>
-                  Alert dispatch is under development
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2 opacity-40 pointer-events-none select-none">
-                {ALERT_TYPES.map(type => (
-                  <span key={type}
-                    className="px-3 py-1.5 text-xs font-mono rounded border"
-                    style={{ backgroundColor: t.inputBg, borderColor: t.cardBorder, color: t.textMuted }}>
+          {/* Alert types */}
+          <Field label="Alert Types" hint="configure channels in Settings" t={t}>
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {ALERT_TYPES.map(type => {
+                const active = form.alertTypes.includes(type);
+                return (
+                  <button key={type} type="button" onClick={() => toggleAlert(type)}
+                    className="px-3 py-1.5 text-xs font-mono rounded border transition-colors"
+                    style={active
+                      ? { backgroundColor: 'rgba(59,130,246,0.15)', borderColor: 'rgba(59,130,246,0.5)', color: '#93c5fd' }
+                      : { backgroundColor: t.tagBg, borderColor: t.tagBorder, color: t.textMuted }
+                    }>
                     {type}
-                  </span>
-                ))}
-              </div>
+                  </button>
+                );
+              })}
             </div>
           </Field>
 

@@ -34,7 +34,7 @@ export const INTERVAL_OPTIONS = [
   { label: '1hr',  value: 3600 },
 ];
 
-export const ALERT_TYPES  = ['Email', 'SMS', 'Webhook', 'None'];
+export const ALERT_TYPES  = ['Email', 'SMS', 'Telegram', 'Webhook', 'None'];
 export const CHECK_TYPES  = [
   { label: 'HTTP / HTTPS', value: 'http' },
   { label: 'TCP Port',     value: 'tcp'  },

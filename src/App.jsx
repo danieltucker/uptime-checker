@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon } from 'lucide-react';
+import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code } from 'lucide-react';
 
-import { useMonitors }  from './hooks/useMonitors';
-import { useTheme }     from './hooks/useTheme';
-import { SummaryBar }   from './components/SummaryBar';
-import { MonitorCard }  from './components/MonitorCard';
-import { MonitorForm }  from './components/MonitorForm';
-import { AlertsPanel }  from './components/AlertsPanel';
+import { useMonitors }    from './hooks/useMonitors';
+import { useTheme }       from './hooks/useTheme';
+import { SummaryBar }     from './components/SummaryBar';
+import { MonitorCard }    from './components/MonitorCard';
+import { MonitorForm }    from './components/MonitorForm';
+import { AlertsPanel }    from './components/AlertsPanel';
+import { SettingsPanel }  from './components/SettingsPanel';
+import { EmbedModal }     from './components/EmbedModal';
 
 // ── Reference monitors seeded on first load ───────────────────────────────────
 const REFERENCE_SEEDS = [
@@ -47,6 +49,8 @@ export default function App() {
   const [tagFilter,      setTagFilter]      = useState([]);
   const [showAlerts,     setShowAlerts]     = useState(false);
   const [sortBy,         setSortBy]         = useState('default');
+  const [showSettings,   setShowSettings]   = useState(false);
+  const [embedMonitor,   setEmbedMonitor]   = useState(null);   // null = closed, undefined = full-page
   const [alerts, setAlerts] = useState(() => {
     try { return JSON.parse(localStorage.getItem('wt-alerts') || '[]'); }
     catch { return []; }
@@ -192,7 +196,7 @@ export default function App() {
             </span>
             <span className="hidden sm:inline text-xs font-mono px-2 py-0.5 rounded border"
               style={{ color: t.textFaint, borderColor: t.cardBorder }}>
-              uptime monitor · v2
+              uptime monitor · v3
             </span>
           </div>
 
@@ -248,6 +252,22 @@ export default function App() {
                   {ongoingCount}
                 </span>
               )}
+            </button>
+
+            {/* Embed full dashboard */}
+            <button onClick={() => setEmbedMonitor(undefined)}
+              className="p-1.5 rounded transition-colors"
+              style={{ color: t.textMuted }}
+              title="Embed dashboard">
+              <Code size={16} />
+            </button>
+
+            {/* Settings */}
+            <button onClick={() => setShowSettings(true)}
+              className="p-1.5 rounded transition-colors"
+              style={{ color: t.textMuted }}
+              title="Alert settings">
+              <Settings size={16} />
             </button>
 
             {/* Theme toggle */}
@@ -330,6 +350,7 @@ export default function App() {
                     monitor={m}
                     onEdit={openEdit}
                     onDelete={handleDelete}
+                    onEmbed={m => setEmbedMonitor(m)}
                   />
                 ))}
               </div>
@@ -363,7 +384,7 @@ export default function App() {
         )}
       </main>
 
-      {/* ── Modal ───────────────────────────────────────────────────────────── */}
+      {/* ── Modals / panels ─────────────────────────────────────────────────── */}
       {showForm && (
         <MonitorForm
           editingMonitor={editingMonitor}
@@ -371,6 +392,15 @@ export default function App() {
           onCancel={closeForm}
           submitting={submitting}
           allTags={allTags}
+        />
+      )}
+
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+
+      {embedMonitor !== null && (
+        <EmbedModal
+          monitor={embedMonitor}
+          onClose={() => setEmbedMonitor(null)}
         />
       )}
     </div>
