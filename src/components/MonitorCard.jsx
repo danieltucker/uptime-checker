@@ -40,13 +40,18 @@ function SparkTooltip({ active, payload }) {
   const d = payload[0]?.payload;
   if (!d) return null;
 
-  const isDown = d.status === 'down';
-  const total  = d.ping ?? 0;
-  const hasBreakdown = !isDown && d.dnsMs != null;
+  const isDown      = d.status === 'down';
+  const total       = d.ping ?? 0;
+  const isAggregated = d.aggregated === true;
+  const hasBreakdown = !isDown && !isAggregated && d.dnsMs != null;
+  const segments     = hasBreakdown ? TIMING_SEGMENTS.filter(s => d[s.key] != null) : [];
 
-  const segments = hasBreakdown
-    ? TIMING_SEGMENTS.filter(s => d[s.key] != null)
-    : [];
+  const timeLabel = d.timestamp
+    ? new Date(d.timestamp).toLocaleString('en-US', {
+        hour12: false, month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+    : '';
 
   return (
     <div className="rounded-lg text-xs font-mono shadow-xl border"
@@ -58,13 +63,14 @@ function SparkTooltip({ active, payload }) {
       }}>
 
       {isDown ? (
-        <div className="text-red-400 font-bold tracking-widest">DOWN</div>
+        <div className="text-red-400 font-bold tracking-widest mb-1.5">DOWN</div>
       ) : (
         <>
           <div className="font-bold mb-2.5" style={{ color: t.textPrimary }}>
-            {total}ms total
+            {isAggregated ? `avg ${total}ms` : `${total}ms total`}
           </div>
 
+          {/* Raw point: show DNS/TCP/TLS/TTFB bars */}
           {segments.length > 0 && (
             <div className="space-y-1.5 mb-2.5">
               {segments.map(({ key, label, color }) => {
@@ -75,7 +81,7 @@ function SparkTooltip({ active, payload }) {
                     <span style={{ color: t.textMuted, width: 28, flexShrink: 0 }}>{label}</span>
                     <div className="flex-1 h-1.5 rounded-full overflow-hidden"
                       style={{ backgroundColor: t.metricGap }}>
-                      <div className="h-full rounded-full transition-all"
+                      <div className="h-full rounded-full"
                         style={{ width: `${pct}%`, backgroundColor: color }} />
                     </div>
                     <span style={{ color, width: 42, textAlign: 'right', flexShrink: 0 }}>
@@ -86,13 +92,21 @@ function SparkTooltip({ active, payload }) {
               })}
             </div>
           )}
+
+          {/* Aggregated bucket: show uptime% for that bucket */}
+          {isAggregated && d.uptimePct != null && (
+            <div className="mb-1.5 flex items-center gap-2">
+              <span style={{ color: t.textMuted }}>Uptime</span>
+              <span style={{ color: d.uptimePct === 100 ? '#4ade80' : d.uptimePct >= 95 ? '#fbbf24' : '#f87171' }}>
+                {d.uptimePct}%
+              </span>
+            </div>
+          )}
         </>
       )}
 
       <div className="pt-1.5 border-t" style={{ borderColor: t.tooltipBorder, color: t.textFaint }}>
-        {d.timestamp
-          ? new Date(d.timestamp).toLocaleTimeString('en-US', { hour12: false })
-          : ''}
+        {timeLabel}
       </div>
     </div>
   );
@@ -180,10 +194,10 @@ function CheckTypeBadge({ checkType }) {
 // MonitorCard
 // ---------------------------------------------------------------------------
 
-export function MonitorCard({ monitor, onEdit, onDelete, historyWindow = 20, compact = false }) {
+export function MonitorCard({ monitor, onEdit, onDelete, compact = false }) {
   const { t } = useTheme();
 
-  const chartData = monitor.history.slice(-historyWindow).map((h, i) => ({
+  const chartData = monitor.history.map((h, i) => ({
     i,
     ping:      h.ping ?? 0,
     status:    h.status,

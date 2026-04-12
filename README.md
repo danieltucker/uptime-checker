@@ -21,15 +21,16 @@ The whole stack ships as a single Docker Compose service - build, run, and forge
 - **Live dashboard** - cards update in real time via Server-Sent Events (no polling)
 - **Detailed timing** - DNS, TCP, TLS, and TTFB measured separately for HTTP checks
 - **SSL certificate monitoring** - days until expiry shown on HTTPS monitors
-- **Graphical sparkline tooltip** - hover shows DNS/TCP/TLS/TTFB as proportional colored bars with ms labels
-- **Configurable history window** - choose 10, 20, or 50 data points in the sparkline (persists across sessions)
-- **Uptime percentage** - rolling calculation over the last 50 checks
+- **Graphical sparkline tooltip** - hover shows DNS/TCP/TLS/TTFB as proportional colored bars with ms labels; aggregated windows show avg ping and per-bucket uptime
+- **Time-based history window** - choose 1h (raw), 12h (15-min buckets), 1d (1-hour buckets), or 1w (6-hour buckets); the sparkline, uptime percentage, and tooltip all reflect the selected window; persists across sessions
+- **Uptime percentage** - calculated from the selected history window so the number always matches what you are looking at
 - **Summary bar** - total monitors, online/offline count, average ping across all hosts
 - **Status badges** - UP (green), DOWN (red + pulse), PENDING (amber)
+- **Sorting** - sort the monitor grid by uptime (worst first, to surface problems) or average ping (slowest first); default preserves creation order
 - **Tag filtering** - filter the dashboard grid by one or more tags; multiple tags use OR logic
 - **Tag autocomplete** - the tag input suggests existing tags as you type and lets you create new ones
 - **Edit / Delete** - update any monitor config; changes take effect on the next check
-- **Alert type tagging** - mark monitors with Email / SMS / Webhook / None
+- **Alert type tagging** - Email / SMS / Webhook dispatch (coming soon)
 - **Alerts panel** - bell icon shows active and resolved outage alerts; ongoing alerts display a live elapsed-time counter; dismissed individually or all at once; persists across reloads
 - **Network Reference section** - Google, Cloudflare (1.1.1.1), Google DNS (8.8.8.8), and Cloudflare.com are auto-seeded on first run and shown in a compact strip at the bottom of the dashboard to help distinguish app-level failures from network-level ones
 - **Dark / Light theme** - toggle with the sun/moon button in the header; preference persists in localStorage

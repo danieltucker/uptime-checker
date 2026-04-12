@@ -7,45 +7,33 @@ import { broadcast }                    from '../sse.js';
 
 const router = Router();
 
-// ── Helper: build full monitor payload (with history + computed fields) ───────
+// ── Window config ─────────────────────────────────────────────────────────────
+// lookback: SQLite datetime modifier
+// bucketMinutes: null = return raw points; number = aggregate into N-min buckets
 
-function buildMonitorPayload(id) {
-  const row = db.prepare('SELECT * FROM monitors WHERE id = ?').get(id);
-  if (!row) return null;
+const WINDOWS = {
+  '1h':  { lookback: '-1 hour',   bucketMinutes: null },
+  '12h': { lookback: '-12 hours', bucketMinutes: 15   },
+  '1d':  { lookback: '-1 day',    bucketMinutes: 60   },
+  '1w':  { lookback: '-7 days',   bucketMinutes: 360  },
+};
 
-  const monitor = rowToMonitor(row);
+// ── Windowed history query ────────────────────────────────────────────────────
 
-  // Last 50 checks, oldest-first (for the sparkline chart)
+function getWindowedHistory(monitorId, window) {
+  const cfg = WINDOWS[window] ?? WINDOWS['1h'];
+
   const rows = db.prepare(`
     SELECT checked_at, status, total_ms, dns_ms, tcp_ms, tls_ms,
            ttfb_ms, http_status, cert_days, error
     FROM   check_history
-    WHERE  monitor_id = ?
-    ORDER  BY checked_at DESC
-    LIMIT  50
-  `).all(id).reverse();
+    WHERE  monitor_id = ? AND checked_at >= datetime('now', ?)
+    ORDER  BY checked_at ASC
+  `).all(monitorId, cfg.lookback);
 
-  const latest    = rows.length ? rows[rows.length - 1] : null;
-  const upCount   = rows.filter(r => r.status === 'up').length;
-
-  return {
-    ...monitor,
-    status:        latest?.status       ?? 'pending',
-    currentPing:   latest?.total_ms     ?? null,
-    uptimePercent: rows.length
-      ? Math.round((upCount / rows.length) * 1000) / 10
-      : 100,
-    lastChecked:   latest?.checked_at   ?? null,
-    latest: latest ? {
-      dnsMs:      latest.dns_ms,
-      tcpMs:      latest.tcp_ms,
-      tlsMs:      latest.tls_ms,
-      ttfbMs:     latest.ttfb_ms,
-      totalMs:    latest.total_ms,
-      httpStatus: latest.http_status,
-      certDays:   latest.cert_days,
-    } : null,
-    history: rows.map(r => ({
+  if (!cfg.bucketMinutes) {
+    // Return raw points for the 1h window
+    return rows.map(r => ({
       timestamp:  r.checked_at,
       ping:       r.total_ms,
       status:     r.status,
@@ -56,21 +44,96 @@ function buildMonitorPayload(id) {
       httpStatus: r.http_status,
       certDays:   r.cert_days,
       error:      r.error,
-    })),
+    }));
+  }
+
+  // Bucket-aggregate in JS for longer windows
+  const bucketMs = cfg.bucketMinutes * 60 * 1000;
+  const buckets  = new Map();
+
+  for (const r of rows) {
+    const ts    = new Date(r.checked_at).getTime();
+    const bKey  = Math.floor(ts / bucketMs) * bucketMs;
+    if (!buckets.has(bKey)) buckets.set(bKey, { ts: bKey, pings: [], statuses: [] });
+    const b = buckets.get(bKey);
+    if (r.total_ms != null) b.pings.push(r.total_ms);
+    b.statuses.push(r.status);
+  }
+
+  return [...buckets.values()]
+    .sort((a, b) => a.ts - b.ts)
+    .map(b => ({
+      timestamp:  new Date(b.ts).toISOString(),
+      ping:       b.pings.length
+        ? Math.round(b.pings.reduce((s, v) => s + v, 0) / b.pings.length)
+        : null,
+      status:     b.statuses.some(s => s === 'down') ? 'down' : 'up',
+      aggregated: true,
+      uptimePct:  b.statuses.length
+        ? Math.round((b.statuses.filter(s => s === 'up').length / b.statuses.length) * 100)
+        : 100,
+    }));
+}
+
+// ── Build full monitor payload ─────────────────────────────────────────────────
+
+function buildMonitorPayload(id, window = '1h') {
+  const row = db.prepare('SELECT * FROM monitors WHERE id = ?').get(id);
+  if (!row) return null;
+
+  const monitor = rowToMonitor(row);
+  const history = getWindowedHistory(id, window);
+
+  // Uptime% calculated from the windowed history
+  const upCount       = history.filter(r => r.status === 'up').length;
+  const uptimePercent = history.length
+    ? Math.round((upCount / history.length) * 1000) / 10
+    : 100;
+
+  // Always use the most recent raw check for current ping, last-checked, and
+  // the timing breakdown row shown beneath the card header
+  const latestRaw = db.prepare(`
+    SELECT checked_at, status, total_ms, dns_ms, tcp_ms, tls_ms,
+           ttfb_ms, http_status, cert_days
+    FROM   check_history
+    WHERE  monitor_id = ?
+    ORDER  BY checked_at DESC
+    LIMIT  1
+  `).get(id);
+
+  return {
+    ...monitor,
+    status:        latestRaw?.status      ?? 'pending',
+    currentPing:   latestRaw?.total_ms    ?? null,
+    uptimePercent,
+    lastChecked:   latestRaw?.checked_at  ?? null,
+    historyWindow: window,
+    latest: latestRaw ? {
+      dnsMs:      latestRaw.dns_ms,
+      tcpMs:      latestRaw.tcp_ms,
+      tlsMs:      latestRaw.tls_ms,
+      ttfbMs:     latestRaw.ttfb_ms,
+      totalMs:    latestRaw.total_ms,
+      httpStatus: latestRaw.http_status,
+      certDays:   latestRaw.cert_days,
+    } : null,
+    history,
   };
 }
 
 // ── GET /api/monitors ─────────────────────────────────────────────────────────
 
-router.get('/', (_req, res) => {
-  const ids = db.prepare('SELECT id FROM monitors ORDER BY created_at ASC').all();
-  res.json(ids.map(r => buildMonitorPayload(r.id)));
+router.get('/', (req, res) => {
+  const window = WINDOWS[req.query.window] ? req.query.window : '1h';
+  const ids    = db.prepare('SELECT id FROM monitors ORDER BY created_at ASC').all();
+  res.json(ids.map(r => buildMonitorPayload(r.id, window)));
 });
 
 // ── GET /api/monitors/:id ─────────────────────────────────────────────────────
 
 router.get('/:id', (req, res) => {
-  const payload = buildMonitorPayload(req.params.id);
+  const window  = WINDOWS[req.query.window] ? req.query.window : '1h';
+  const payload = buildMonitorPayload(req.params.id, window);
   if (!payload) return res.status(404).json({ error: 'Monitor not found' });
   res.json(payload);
 });
@@ -141,11 +204,9 @@ router.put('/:id', (req, res) => {
     WHERE id = @id
   `).run({ ...next, id });
 
-  // Restart with potentially new interval / target
   scheduleMonitor(id, next.interval);
 
-  const payload = buildMonitorPayload(id);
-  res.json(payload);
+  res.json(buildMonitorPayload(id));
 });
 
 // ── DELETE /api/monitors/:id ──────────────────────────────────────────────────

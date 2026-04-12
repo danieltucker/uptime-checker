@@ -17,26 +17,36 @@ const REFERENCE_SEEDS = [
 ];
 
 const HISTORY_OPTIONS = [
-  { label: '10 pts', value: 10 },
-  { label: '20 pts', value: 20 },
-  { label: '50 pts', value: 50 },
+  { label: '1h',  value: '1h'  },
+  { label: '12h', value: '12h' },
+  { label: '1d',  value: '1d'  },
+  { label: '1w',  value: '1w'  },
+];
+
+const SORT_OPTIONS = [
+  { label: 'Default',  value: 'default' },
+  { label: 'Uptime',   value: 'uptime'  },
+  { label: 'Avg Ping', value: 'ping'    },
 ];
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { monitors, loading, error, addMonitor, updateMonitor, deleteMonitor } = useMonitors();
   const { isDark, t, toggle: toggleTheme } = useTheme();
+
+  const [historyWindow,  setHistoryWindow]  = useState(() => {
+    try { return localStorage.getItem('wt-history-window') || '1h'; }
+    catch { return '1h'; }
+  });
+
+  const { monitors, loading, error, addMonitor, updateMonitor, deleteMonitor } = useMonitors(historyWindow);
 
   const [showForm,       setShowForm]       = useState(false);
   const [editingMonitor, setEditingMonitor] = useState(null);
   const [submitting,     setSubmitting]     = useState(false);
   const [tagFilter,      setTagFilter]      = useState([]);
   const [showAlerts,     setShowAlerts]     = useState(false);
-  const [historyWindow,  setHistoryWindow]  = useState(() => {
-    try { return Number(localStorage.getItem('wt-history-window') || 20); }
-    catch { return 20; }
-  });
+  const [sortBy,         setSortBy]         = useState('default');
   const [alerts, setAlerts] = useState(() => {
     try { return JSON.parse(localStorage.getItem('wt-alerts') || '[]'); }
     catch { return []; }
@@ -97,7 +107,7 @@ export default function App() {
 
   // ── Persist history window choice ─────────────────────────────────────────
   useEffect(() => {
-    try { localStorage.setItem('wt-history-window', String(historyWindow)); }
+    try { localStorage.setItem('wt-history-window', historyWindow); }
     catch {}
   }, [historyWindow]);
 
@@ -108,9 +118,23 @@ export default function App() {
   // All unique tags from user monitors (never includes _ref)
   const allTags = [...new Set(userMonitors.flatMap(m => m.tags ?? []))].sort();
 
-  const filteredMonitors = tagFilter.length === 0
+  const filteredMonitors = (tagFilter.length === 0
     ? userMonitors
-    : userMonitors.filter(m => tagFilter.some(tag => m.tags?.includes(tag)));
+    : userMonitors.filter(m => tagFilter.some(tag => m.tags?.includes(tag)))
+  ).slice().sort((a, b) => {
+    if (sortBy === 'uptime') {
+      // Worst uptime first so problems surface at the top
+      return (a.uptimePercent ?? 100) - (b.uptimePercent ?? 100);
+    }
+    if (sortBy === 'ping') {
+      // Slowest first; null pings go to the bottom
+      if (a.currentPing == null && b.currentPing == null) return 0;
+      if (a.currentPing == null) return 1;
+      if (b.currentPing == null) return -1;
+      return b.currentPing - a.currentPing;
+    }
+    return 0; // default: server creation order
+  });
 
   const activeAlerts  = alerts.filter(a => !a.dismissed);
   const ongoingCount  = activeAlerts.filter(a => !a.upAt).length;
@@ -186,13 +210,27 @@ export default function App() {
 
             {/* History window selector */}
             <div className="hidden sm:flex items-center gap-1.5">
-              <span className="text-xs font-mono" style={{ color: t.textMuted }}>History</span>
+              <span className="text-xs font-mono" style={{ color: t.textMuted }}>Window</span>
               <select
                 value={historyWindow}
-                onChange={e => setHistoryWindow(Number(e.target.value))}
+                onChange={e => setHistoryWindow(e.target.value)}
                 className="text-xs font-mono rounded border px-1.5 py-0.5 appearance-none cursor-pointer focus:outline-none"
                 style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
                 {HISTORY_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort selector */}
+            <div className="hidden sm:flex items-center gap-1.5">
+              <span className="text-xs font-mono" style={{ color: t.textMuted }}>Sort</span>
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="text-xs font-mono rounded border px-1.5 py-0.5 appearance-none cursor-pointer focus:outline-none"
+                style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
+                {SORT_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
@@ -292,7 +330,6 @@ export default function App() {
                     monitor={m}
                     onEdit={openEdit}
                     onDelete={handleDelete}
-                    historyWindow={historyWindow}
                   />
                 ))}
               </div>
@@ -316,7 +353,6 @@ export default function App() {
                       monitor={m}
                       onEdit={null}
                       onDelete={null}
-                      historyWindow={historyWindow}
                       compact
                     />
                   ))}
