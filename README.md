@@ -11,6 +11,8 @@ The whole stack ships as a single Docker Compose service — build, run, and for
 ![Status: Active](https://img.shields.io/badge/status-active-green)
 ![Version](https://img.shields.io/badge/version-2.0-blue)
 
+![WatchTower dashboard screenshot](screenshot.png)
+
 ---
 
 ## Features
