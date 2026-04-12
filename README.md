@@ -37,6 +37,55 @@ The whole stack ships as a single Docker Compose service - build, run, and forge
 - **Dark / Light theme** - toggle with the sun/moon button in the header; preference persists in localStorage
 - **Persistent storage** - all monitors, check history, and alert settings survive restarts (SQLite)
 
+## Check Types
+
+### HTTP / HTTPS
+
+Sends a real HTTP or HTTPS request to a URL and measures the full request lifecycle — DNS resolution, TCP handshake, TLS negotiation, and time-to-first-byte. Checks for a successful response (2xx/3xx by default).
+
+**Best for:**
+- Public-facing websites and landing pages — confirm the page actually loads, not just that the port is open
+- REST APIs and webhooks — verify the endpoint returns a healthy status code
+- Services behind a reverse proxy (Nginx, Caddy, Traefik) — catches application-layer failures that a port check would miss
+- Anything with a TLS certificate — WatchTower shows days until expiry so you're never caught off-guard by a cert renewal failure
+- Third-party SaaS your app depends on (payment gateway, auth provider, CDN) — know before your users do
+
+**What you get:** DNS ms, TCP ms, TLS ms, TTFB ms, HTTP status code, SSL expiry countdown.
+
+---
+
+### TCP
+
+Opens a raw TCP connection to a host and port. No application-layer data is exchanged — success simply means the port accepted the connection.
+
+**Best for:**
+- Databases (Postgres :5432, MySQL :3306, Redis :6379) — confirm the service is listening without needing credentials
+- Mail servers, LDAP, or any protocol that doesn't speak HTTP
+- Internal services that aren't exposed via a URL (a game server, a private API, a Docker container on a custom port)
+- Checking that a firewall rule or port-forward is working correctly
+- Load balancer health — verify backend nodes are up at the TCP level
+
+**What you get:** connection latency in ms; no application-layer detail.
+
+---
+
+### ICMP (Ping)
+
+Sends an ICMP echo request (ping) to a host. Measures raw round-trip latency with no concern for open ports or services.
+
+**Best for:**
+- Bare-metal servers and VMs — confirm the host is alive even if all services are down
+- Network equipment — routers, switches, access points, and managed PDUs that don't run web servers
+- NAS boxes, printers, and IoT devices on your LAN
+- Diagnosing latency rather than availability — e.g. tracking jitter on a home internet connection
+- The WatchTower Network Reference hosts (Google, Cloudflare DNS) use ICMP so you can compare your own hosts against known-good internet references
+
+**Note:** ICMP requires the `NET_RAW` capability. The provided `docker-compose.yml` sets this automatically; running outside Docker may require `sudo` or `CAP_NET_RAW` on the Node process.
+
+**What you get:** round-trip latency in ms; no port or application detail.
+
+---
+
 ## Alert Notifications
 
 Open the Settings panel (gear icon in the header) to configure alert channels. You can test each channel before saving - credentials are sent with the test request so you don't need to save first.
@@ -216,6 +265,11 @@ uptime-checker/
             ├── monitors.js          # CRUD endpoints + manual trigger + windowed history
             └── settings.js          # Alert channel config + test endpoints
 ```
+
+## Backlog
+
+- **HTTP response body validation** — allow an optional expected string or regex to be configured on HTTP monitors; if the response body doesn't match, the check is treated as DOWN even if the status code is 2xx. Useful for API `/health` endpoints that return `200 OK` with an error payload when a dependency is degraded.
+- **Hide unconfigured notification channels** — per-monitor alert type selection currently shows all channels (Email, SMS, Telegram) regardless of whether credentials have been saved in Settings. Only channels with valid saved credentials should be offered as options.
 
 ## License
 
