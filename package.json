@@ -1,19 +1,21 @@
 {
-  "name": "uptime-checker",
+  "name": "watchtower",
   "version": "1.0.0",
-  "description": "site and api checker",
-  "main": "app.js",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "test": "test"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/danieltucker/uptime-checker.git"
+  "dependencies": {
+    "lucide-react": "^0.441.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7"
   },
-  "author": "Daniel Tucker",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/danieltucker/uptime-checker/issues"
-  },
-  "homepage": "https://github.com/danieltucker/uptime-checker#readme"
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.1"
+  }
 }
