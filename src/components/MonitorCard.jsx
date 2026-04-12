@@ -2,6 +2,7 @@ import React from 'react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { Edit2, Trash2, Tag, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { formatInterval, formatTimestamp, certDaysColor } from '../types/monitor';
+import { useTheme } from '../hooks/useTheme';
 
 // ---------------------------------------------------------------------------
 // Status badge
@@ -23,31 +24,83 @@ function StatusBadge({ status }) {
 }
 
 // ---------------------------------------------------------------------------
-// Sparkline
+// Graphical HTTP timing tooltip
 // ---------------------------------------------------------------------------
 
-const SparkTooltip = ({ active, payload }) => {
+const TIMING_SEGMENTS = [
+  { key: 'dnsMs',  label: 'DNS',  color: '#3b82f6' },
+  { key: 'tcpMs',  label: 'TCP',  color: '#22c55e' },
+  { key: 'tlsMs',  label: 'TLS',  color: '#f59e0b' },
+  { key: 'ttfbMs', label: 'TTFB', color: '#a78bfa' },
+];
+
+function SparkTooltip({ active, payload }) {
+  const { t } = useTheme();
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
   if (!d) return null;
+
+  const isDown = d.status === 'down';
+  const total  = d.ping ?? 0;
+  const hasBreakdown = !isDown && d.dnsMs != null;
+
+  const segments = hasBreakdown
+    ? TIMING_SEGMENTS.filter(s => d[s.key] != null)
+    : [];
+
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs font-mono shadow-lg space-y-0.5">
-      <div className={d.status === 'down' ? 'text-red-400' : 'text-gray-200'}>
-        {d.status === 'down' ? 'DOWN' : `${d.ping} ms`}
-      </div>
-      {d.status === 'up' && d.dnsMs != null && (
-        <div className="text-gray-600">
-          DNS {d.dnsMs}  TCP {d.tcpMs}
-          {d.tlsMs != null ? `  TLS ${d.tlsMs}` : ''}
-          {d.ttfbMs != null ? `  TTFB ${d.ttfbMs}` : ''}
-        </div>
+    <div className="rounded-lg text-xs font-mono shadow-xl border"
+      style={{
+        backgroundColor: t.tooltipBg,
+        borderColor:     t.tooltipBorder,
+        minWidth:        172,
+        padding:         '10px 12px',
+      }}>
+
+      {isDown ? (
+        <div className="text-red-400 font-bold tracking-widest">DOWN</div>
+      ) : (
+        <>
+          <div className="font-bold mb-2.5" style={{ color: t.textPrimary }}>
+            {total}ms total
+          </div>
+
+          {segments.length > 0 && (
+            <div className="space-y-1.5 mb-2.5">
+              {segments.map(({ key, label, color }) => {
+                const value = d[key];
+                const pct   = total > 0 ? Math.max(4, Math.round((value / total) * 100)) : 4;
+                return (
+                  <div key={key} className="flex items-center gap-2">
+                    <span style={{ color: t.textMuted, width: 28, flexShrink: 0 }}>{label}</span>
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden"
+                      style={{ backgroundColor: t.metricGap }}>
+                      <div className="h-full rounded-full transition-all"
+                        style={{ width: `${pct}%`, backgroundColor: color }} />
+                    </div>
+                    <span style={{ color, width: 42, textAlign: 'right', flexShrink: 0 }}>
+                      {value}ms
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
-      <div className="text-gray-700">
-        {d.timestamp ? new Date(d.timestamp).toLocaleTimeString('en-US', { hour12: false }) : ''}
+
+      <div className="pt-1.5 border-t" style={{ borderColor: t.tooltipBorder, color: t.textFaint }}>
+        {d.timestamp
+          ? new Date(d.timestamp).toLocaleTimeString('en-US', { hour12: false })
+          : ''}
       </div>
     </div>
   );
-};
+}
+
+// ---------------------------------------------------------------------------
+// Down-event dot on sparkline
+// ---------------------------------------------------------------------------
 
 const SparkDot = ({ cx, cy, payload, index }) => {
   if (!cx || !cy) return null;
@@ -58,17 +111,18 @@ const SparkDot = ({ cx, cy, payload, index }) => {
 };
 
 // ---------------------------------------------------------------------------
-// Timing breakdown row (HTTP checks only)
+// Timing breakdown row beneath the card header (HTTP only)
 // ---------------------------------------------------------------------------
 
 function TimingRow({ latest }) {
+  const { t } = useTheme();
   if (!latest || latest.dnsMs == null) return null;
   return (
     <div className="px-3 pb-2 flex items-center gap-3 flex-wrap">
-      <TimingChip label="DNS"  value={latest.dnsMs} />
-      <TimingChip label="TCP"  value={latest.tcpMs} />
-      {latest.tlsMs != null && <TimingChip label="TLS"  value={latest.tlsMs} />}
-      <TimingChip label="TTFB" value={latest.ttfbMs} />
+      <TimingChip label="DNS"  value={latest.dnsMs}  color="#3b82f6" t={t} />
+      <TimingChip label="TCP"  value={latest.tcpMs}  color="#22c55e" t={t} />
+      {latest.tlsMs  != null && <TimingChip label="TLS"  value={latest.tlsMs}  color="#f59e0b" t={t} />}
+      <TimingChip label="TTFB" value={latest.ttfbMs} color="#a78bfa" t={t} />
       {latest.httpStatus != null && (
         <span className={`text-xs font-mono ml-auto ${latest.httpStatus < 400 ? 'text-green-400/70' : 'text-red-400'}`}>
           HTTP {latest.httpStatus}
@@ -78,11 +132,13 @@ function TimingRow({ latest }) {
   );
 }
 
-function TimingChip({ label, value }) {
+function TimingChip({ label, value, color, t }) {
   if (value == null) return null;
   return (
-    <span className="text-xs font-mono text-gray-600">
-      <span className="text-gray-700">{label} </span>{value}<span className="text-gray-800">ms</span>
+    <span className="text-xs font-mono flex items-center gap-0.5">
+      <span style={{ color: t.textFaint }}>{label} </span>
+      <span style={{ color }}>{value}</span>
+      <span style={{ color: t.textFaint }}>ms</span>
     </span>
   );
 }
@@ -96,7 +152,8 @@ function CertBadge({ certDays }) {
   const colorCls = certDaysColor(certDays);
   const Icon = certDays > 7 ? ShieldCheck : ShieldAlert;
   return (
-    <span className={`flex items-center gap-0.5 text-xs font-mono ${colorCls}`} title={`SSL cert expires in ${certDays} days`}>
+    <span className={`flex items-center gap-0.5 text-xs font-mono ${colorCls}`}
+      title={`SSL cert expires in ${certDays} days`}>
       <Icon size={11} />
       {certDays}d
     </span>
@@ -110,8 +167,10 @@ function CertBadge({ certDays }) {
 const CHECK_TYPE_LABELS = { http: 'HTTP', tcp: 'TCP', icmp: 'ICMP' };
 
 function CheckTypeBadge({ checkType }) {
+  const { t } = useTheme();
   return (
-    <span className="text-xs font-mono text-gray-700 border border-gray-800 px-1.5 py-0.5 rounded">
+    <span className="text-xs font-mono px-1.5 py-0.5 rounded border"
+      style={{ color: t.textFaint, borderColor: t.cardBorder }}>
       {CHECK_TYPE_LABELS[checkType] ?? checkType}
     </span>
   );
@@ -121,8 +180,10 @@ function CheckTypeBadge({ checkType }) {
 // MonitorCard
 // ---------------------------------------------------------------------------
 
-export function MonitorCard({ monitor, onEdit, onDelete }) {
-  const chartData = monitor.history.slice(-20).map((h, i) => ({
+export function MonitorCard({ monitor, onEdit, onDelete, historyWindow = 20, compact = false }) {
+  const { t } = useTheme();
+
+  const chartData = monitor.history.slice(-historyWindow).map((h, i) => ({
     i,
     ping:      h.ping ?? 0,
     status:    h.status,
@@ -137,70 +198,147 @@ export function MonitorCard({ monitor, onEdit, onDelete }) {
   const gradientId = `spark-${monitor.id}`;
 
   const uptimeColor =
-    monitor.history.length === 0  ? 'text-gray-600' :
-    monitor.uptimePercent >= 99   ? 'text-green-400' :
-    monitor.uptimePercent >= 95   ? 'text-amber-400' : 'text-red-400';
+    monitor.history.length === 0  ? t.textFaint :
+    monitor.uptimePercent >= 99   ? '#4ade80' :
+    monitor.uptimePercent >= 95   ? '#fbbf24' : '#f87171';
 
   const alertBadges = monitor.alertTypes?.filter(a => a !== 'None') ?? [];
 
-  return (
-    <div className="flex flex-col bg-gray-900 border border-gray-800 rounded-lg overflow-hidden hover:border-gray-700 transition-colors">
+  // ── Compact layout (reference monitors) ───────────────────────────────────
+  if (compact) {
+    return (
+      <div className="flex flex-col rounded-lg border overflow-hidden"
+        style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
 
-      {/* ── Header ──────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-3 pt-3 pb-1.5 gap-1.5">
+          <StatusBadge status={monitor.status} />
+          <span className="text-xs font-mono truncate font-semibold flex-1 ml-1"
+            style={{ color: t.textSecondary }}>
+            {monitor.label}
+          </span>
+          {monitor.currentPing != null && (
+            <span className="text-xs font-mono shrink-0" style={{ color: t.textMuted }}>
+              {monitor.currentPing}ms
+            </span>
+          )}
+        </div>
+
+        <div className="px-2 py-1.5">
+          {chartData.length > 0 ? (
+            <div style={{ width: '100%', height: 36 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={lineColor} stopOpacity={0.2} />
+                      <stop offset="95%" stopColor={lineColor} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="ping"
+                    stroke={lineColor} strokeWidth={1.5}
+                    fill={`url(#${gradientId})`}
+                    dot={<SparkDot />}
+                    activeDot={{ r: 3, fill: lineColor, strokeWidth: 0 }}
+                    isAnimationActive={false}
+                  />
+                  <Tooltip content={<SparkTooltip />}
+                    cursor={{ stroke: t.cardBorder, strokeWidth: 1 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-9 text-xs font-mono"
+              style={{ color: t.textFaint }}>
+              pending…
+            </div>
+          )}
+        </div>
+
+        <div className="px-3 pb-2">
+          <span className="text-xs font-mono" style={{ color: t.textFaint }}>
+            {monitor.target}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Full layout ───────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col rounded-lg border overflow-hidden transition-colors"
+      style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = t.cardBorderHover}
+      onMouseLeave={e => e.currentTarget.style.borderColor = t.cardBorder}>
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between px-4 pt-4 pb-2 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <StatusBadge status={monitor.status} />
           <CheckTypeBadge checkType={monitor.checkType} />
-          <span className="text-sm font-semibold text-gray-100 truncate" title={monitor.label}>
+          <span className="text-sm font-semibold truncate" title={monitor.label}
+            style={{ color: t.textPrimary }}>
             {monitor.label}
           </span>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button onClick={() => onEdit(monitor)} title="Edit"
-            className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-gray-800 transition-colors">
-            <Edit2 size={13} />
-          </button>
-          <button onClick={() => onDelete(monitor.id)} title="Delete"
-            className="p-1.5 rounded text-gray-600 hover:text-red-400 hover:bg-red-400/10 transition-colors">
-            <Trash2 size={13} />
-          </button>
-        </div>
+        {(onEdit || onDelete) && (
+          <div className="flex items-center gap-1 shrink-0">
+            {onEdit && (
+              <button onClick={() => onEdit(monitor)} title="Edit"
+                className="p-1.5 rounded transition-colors"
+                style={{ color: t.textFaint }}
+                onMouseEnter={e => e.currentTarget.style.color = t.textPrimary}
+                onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+                <Edit2 size={13} />
+              </button>
+            )}
+            {onDelete && (
+              <button onClick={() => onDelete(monitor.id)} title="Delete"
+                className="p-1.5 rounded transition-colors"
+                style={{ color: t.textFaint }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.backgroundColor = 'rgba(248,113,113,0.1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = t.textFaint; e.currentTarget.style.backgroundColor = ''; }}>
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Target + description */}
       <div className="px-4 pb-3 leading-none">
-        <span className="text-xs font-mono text-gray-500">{monitor.target}</span>
+        <span className="text-xs font-mono" style={{ color: t.textMuted }}>
+          {monitor.target}
+        </span>
         {monitor.port && (
-          <span className="text-xs font-mono text-gray-700">:{monitor.port}</span>
+          <span className="text-xs font-mono" style={{ color: t.textFaint }}>
+            :{monitor.port}
+          </span>
         )}
         {monitor.description && (
-          <span className="text-xs text-gray-700 ml-2">— {monitor.description}</span>
+          <span className="text-xs ml-2" style={{ color: t.textFaint }}>
+            — {monitor.description}
+          </span>
         )}
       </div>
 
-      {/* ── Metrics row ─────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-px bg-gray-800 border-t border-b border-gray-800">
-        <Metric
-          label="Ping"
+      {/* ── Metrics row ─────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-px border-t border-b"
+        style={{ backgroundColor: t.metricGap, borderColor: t.metricGap }}>
+        <Metric label="Ping"
           value={monitor.currentPing != null ? `${monitor.currentPing}ms` : '—'}
-          valueClass="text-gray-100"
-        />
-        <Metric
-          label="24h Up"
+          valueStyle={{ color: t.textPrimary }} t={t} />
+        <Metric label="Uptime"
           value={monitor.history.length > 0 ? `${monitor.uptimePercent}%` : '—'}
-          valueClass={uptimeColor}
-        />
-        <Metric
-          label="Every"
+          valueStyle={{ color: uptimeColor }} t={t} />
+        <Metric label="Every"
           value={formatInterval(monitor.interval)}
-          valueClass="text-gray-300"
-        />
+          valueStyle={{ color: t.textSecondary }} t={t} />
       </div>
 
-      {/* ── Timing breakdown (HTTP only, latest check) ──────── */}
+      {/* ── Timing breakdown (HTTP only) ─────────────────────────────────────── */}
       <TimingRow latest={monitor.latest} />
 
-      {/* ── Sparkline ───────────────────────────────────────── */}
+      {/* ── Sparkline ────────────────────────────────────────────────────────── */}
       <div className="px-2 py-2">
         {chartData.length > 0 ? (
           <div style={{ width: '100%', height: 52 }}>
@@ -212,45 +350,51 @@ export function MonitorCard({ monitor, onEdit, onDelete }) {
                     <stop offset="95%" stopColor={lineColor} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <Area
-                  type="monotone"
-                  dataKey="ping"
-                  stroke={lineColor}
-                  strokeWidth={1.5}
+                <Area type="monotone" dataKey="ping"
+                  stroke={lineColor} strokeWidth={1.5}
                   fill={`url(#${gradientId})`}
                   dot={<SparkDot />}
                   activeDot={{ r: 3, fill: lineColor, strokeWidth: 0 }}
                   isAnimationActive={false}
                 />
-                <Tooltip content={<SparkTooltip />} cursor={{ stroke: '#30363d', strokeWidth: 1 }} />
+                <Tooltip content={<SparkTooltip />}
+                  cursor={{ stroke: t.cardBorder, strokeWidth: 1 }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-[52px] text-xs font-mono text-gray-700">
+          <div className="flex items-center justify-center h-[52px] text-xs font-mono"
+            style={{ color: t.textFaint }}>
             awaiting first check…
           </div>
         )}
       </div>
 
-      {/* ── Footer ──────────────────────────────────────────── */}
+      {/* ── Footer ───────────────────────────────────────────────────────────── */}
       <div className="px-4 pb-3 flex items-center justify-between gap-2 mt-auto">
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-mono text-gray-700">
-            {monitor.lastChecked
-              ? <><span className="text-gray-600">checked</span> {formatTimestamp(monitor.lastChecked)}</>
-              : 'not yet checked'}
+          <span className="text-xs font-mono" style={{ color: t.textFaint }}>
+            {monitor.lastChecked ? (
+              <>
+                <span style={{ color: t.textMuted }}>checked</span>{' '}
+                {formatTimestamp(monitor.lastChecked)}
+              </>
+            ) : 'not yet checked'}
           </span>
           <CertBadge certDays={monitor.latest?.certDays} />
         </div>
+
         <div className="flex items-center gap-1 flex-wrap justify-end">
           {alertBadges.map(a => (
-            <span key={a} className="text-xs font-mono text-gray-500 bg-gray-800 border border-gray-700 px-1.5 py-0.5 rounded">
+            <span key={a} className="text-xs font-mono px-1.5 py-0.5 rounded border"
+              style={{ color: t.textSecondary, backgroundColor: t.tagBg, borderColor: t.tagBorder }}>
               {a}
             </span>
           ))}
-          {monitor.tags?.map(tag => (
-            <span key={tag} className="flex items-center gap-0.5 text-xs font-mono text-blue-400/70 bg-blue-400/5 border border-blue-400/20 px-1.5 py-0.5 rounded">
+          {monitor.tags?.filter(tag => tag !== '_ref').map(tag => (
+            <span key={tag}
+              className="flex items-center gap-0.5 text-xs font-mono px-1.5 py-0.5 rounded"
+              style={{ color: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.2)' }}>
               <Tag size={9} />
               {tag}
             </span>
@@ -261,11 +405,20 @@ export function MonitorCard({ monitor, onEdit, onDelete }) {
   );
 }
 
-function Metric({ label, value, valueClass }) {
+// ---------------------------------------------------------------------------
+// Metric cell
+// ---------------------------------------------------------------------------
+
+function Metric({ label, value, valueStyle, t }) {
   return (
-    <div className="bg-gray-900 px-3 py-2.5">
-      <div className="text-xs font-mono text-gray-600 uppercase tracking-wider mb-0.5">{label}</div>
-      <div className={`text-base font-mono font-bold leading-none ${valueClass}`}>{value}</div>
+    <div className="px-3 py-2.5" style={{ backgroundColor: t.cardBg }}>
+      <div className="text-xs font-mono uppercase tracking-wider mb-0.5"
+        style={{ color: t.textFaint }}>
+        {label}
+      </div>
+      <div className="text-base font-mono font-bold leading-none" style={valueStyle}>
+        {value}
+      </div>
     </div>
   );
 }
