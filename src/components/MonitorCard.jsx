@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { Edit2, Trash2, Tag, ShieldCheck, ShieldAlert, Code } from 'lucide-react';
 import { formatInterval, formatTimestamp, certDaysColor } from '../types/monitor';
@@ -34,14 +35,10 @@ const TIMING_SEGMENTS = [
   { key: 'ttfbMs', label: 'TTFB', color: '#a78bfa' },
 ];
 
-function SparkTooltip({ active, payload }) {
-  const { t } = useTheme();
-  if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload;
-  if (!d) return null;
-
-  const isDown      = d.status === 'down';
-  const total       = d.ping ?? 0;
+// Tooltip content — pure, no portal logic here
+function SparkTooltipContent({ d, t }) {
+  const isDown       = d.status === 'down';
+  const total        = d.ping ?? 0;
   const isAggregated = d.aggregated === true;
   const hasBreakdown = !isDown && !isAggregated && d.dnsMs != null;
   const segments     = hasBreakdown ? TIMING_SEGMENTS.filter(s => d[s.key] != null) : [];
@@ -61,7 +58,6 @@ function SparkTooltip({ active, payload }) {
         minWidth:        172,
         padding:         '10px 12px',
       }}>
-
       {isDown ? (
         <div className="text-red-400 font-bold tracking-widest mb-1.5">DOWN</div>
       ) : (
@@ -69,8 +65,6 @@ function SparkTooltip({ active, payload }) {
           <div className="font-bold mb-2.5" style={{ color: t.textPrimary }}>
             {isAggregated ? `avg ${total}ms` : `${total}ms total`}
           </div>
-
-          {/* Raw point: show DNS/TCP/TLS/TTFB bars */}
           {segments.length > 0 && (
             <div className="space-y-1.5 mb-2.5">
               {segments.map(({ key, label, color }) => {
@@ -92,8 +86,6 @@ function SparkTooltip({ active, payload }) {
               })}
             </div>
           )}
-
-          {/* Aggregated bucket: show uptime% for that bucket */}
           {isAggregated && d.uptimePct != null && (
             <div className="mb-1.5 flex items-center gap-2">
               <span style={{ color: t.textMuted }}>Uptime</span>
@@ -104,11 +96,40 @@ function SparkTooltip({ active, payload }) {
           )}
         </>
       )}
-
       <div className="pt-1.5 border-t" style={{ borderColor: t.tooltipBorder, color: t.textFaint }}>
         {timeLabel}
       </div>
     </div>
+  );
+}
+
+// Portal wrapper — renders the tooltip into document.body so no ancestor
+// overflow or stacking-context can clip it.
+function SparkTooltip({ active, payload, coordinate, containerRef }) {
+  const { t } = useTheme();
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d || !coordinate) return null;
+
+  const rect  = containerRef?.current?.getBoundingClientRect();
+  const pageX = rect ? rect.left + coordinate.x : coordinate.x;
+  const pageY = rect ? rect.top  + coordinate.y : coordinate.y;
+
+  // Flip below the cursor when there isn't enough room above
+  const above = pageY > 160;
+
+  return createPortal(
+    <div style={{
+      position:      'fixed',
+      left:           pageX,
+      top:            pageY,
+      transform:      above ? 'translate(-50%, calc(-100% - 10px))' : 'translate(-50%, 10px)',
+      zIndex:         9999,
+      pointerEvents:  'none',
+    }}>
+      <SparkTooltipContent d={d} t={t} />
+    </div>,
+    document.body
   );
 }
 
@@ -196,6 +217,14 @@ function CheckTypeBadge({ checkType }) {
 
 export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = false }) {
   const { t } = useTheme();
+  const chartRef = useRef(null);
+
+  // Stable tooltip renderer that closes over chartRef — avoids creating a new
+  // function on every render which would cause Recharts to remount the tooltip.
+  const tooltipContent = useMemo(
+    () => (props) => <SparkTooltip {...props} containerRef={chartRef} />,
+    [] // chartRef is a stable object
+  );
 
   const chartData = monitor.history.map((h, i) => ({
     i,
@@ -221,7 +250,7 @@ export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = fals
   // ── Compact layout (reference monitors) ───────────────────────────────────
   if (compact) {
     return (
-      <div className="flex flex-col rounded-lg border overflow-hidden"
+      <div className="flex flex-col rounded-lg border"
         style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
 
         <div className="flex items-center justify-between px-3 pt-3 pb-1.5 gap-1.5">
@@ -239,7 +268,7 @@ export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = fals
 
         <div className="px-2 py-1.5">
           {chartData.length > 0 ? (
-            <div style={{ width: '100%', height: 36 }}>
+            <div ref={chartRef} style={{ width: '100%', height: 36 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                   <defs>
@@ -255,7 +284,7 @@ export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = fals
                     activeDot={{ r: 3, fill: lineColor, strokeWidth: 0 }}
                     isAnimationActive={false}
                   />
-                  <Tooltip content={<SparkTooltip />}
+                  <Tooltip content={tooltipContent}
                     cursor={{ stroke: t.cardBorder, strokeWidth: 1 }} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -279,7 +308,7 @@ export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = fals
 
   // ── Full layout ───────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col rounded-lg border overflow-hidden transition-colors"
+    <div className="flex flex-col rounded-lg border transition-colors"
       style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}
       onMouseEnter={e => e.currentTarget.style.borderColor = t.cardBorderHover}
       onMouseLeave={e => e.currentTarget.style.borderColor = t.cardBorder}>
@@ -362,7 +391,7 @@ export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = fals
       {/* ── Sparkline ────────────────────────────────────────────────────────── */}
       <div className="px-2 py-2">
         {chartData.length > 0 ? (
-          <div style={{ width: '100%', height: 52 }}>
+          <div ref={chartRef} style={{ width: '100%', height: 52 }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 3, right: 2, left: 2, bottom: 3 }}>
                 <defs>
@@ -378,7 +407,7 @@ export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = fals
                   activeDot={{ r: 3, fill: lineColor, strokeWidth: 0 }}
                   isAnimationActive={false}
                 />
-                <Tooltip content={<SparkTooltip />}
+                <Tooltip content={tooltipContent}
                   cursor={{ stroke: t.cardBorder, strokeWidth: 1 }} />
               </AreaChart>
             </ResponsiveContainer>

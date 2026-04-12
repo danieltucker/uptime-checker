@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code } from 'lucide-react';
 
 import { useMonitors }    from './hooks/useMonitors';
+import { useAlerts }      from './hooks/useAlerts';
 import { useTheme }       from './hooks/useTheme';
 import { SummaryBar }     from './components/SummaryBar';
 import { MonitorCard }    from './components/MonitorCard';
@@ -43,6 +44,8 @@ export default function App() {
 
   const { monitors, loading, error, addMonitor, updateMonitor, deleteMonitor } = useMonitors(historyWindow);
 
+  const { alerts, dismiss: dismissAlert, dismissAll } = useAlerts();
+
   const [showForm,       setShowForm]       = useState(false);
   const [editingMonitor, setEditingMonitor] = useState(null);
   const [submitting,     setSubmitting]     = useState(false);
@@ -51,13 +54,8 @@ export default function App() {
   const [sortBy,         setSortBy]         = useState('default');
   const [showSettings,   setShowSettings]   = useState(false);
   const [embedMonitor,   setEmbedMonitor]   = useState(null);   // null = closed, undefined = full-page
-  const [alerts, setAlerts] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('wt-alerts') || '[]'); }
-    catch { return []; }
-  });
 
-  const seededRef    = useRef(false);
-  const prevStatuses = useRef({});
+  const seededRef = useRef(false);
 
   // ── Seed reference monitors once after initial load ───────────────────────
   useEffect(() => {
@@ -70,44 +68,6 @@ export default function App() {
       }
     }
   }, [loading, error]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Alert tracking — detect status transitions ────────────────────────────
-  useEffect(() => {
-    if (loading) return;
-    let changed = false;
-    let next = [...alerts];
-
-    for (const m of monitors) {
-      if (m.tags?.includes('_ref')) continue; // skip reference monitors
-      const prev = prevStatuses.current[m.id];
-      if (m.status === 'pending') { prevStatuses.current[m.id] = m.status; continue; }
-
-      if (prev && prev !== 'down' && m.status === 'down') {
-        next = [{
-          id:           `${m.id}-${Date.now()}`,
-          monitorId:    m.id,
-          monitorLabel: m.label,
-          target:       m.target,
-          downAt:       new Date().toISOString(),
-          upAt:         null,
-          dismissed:    false,
-        }, ...next];
-        changed = true;
-      } else if (prev === 'down' && m.status !== 'down') {
-        next = next.map(a =>
-          a.monitorId === m.id && !a.upAt ? { ...a, upAt: new Date().toISOString() } : a
-        );
-        changed = true;
-      }
-      prevStatuses.current[m.id] = m.status;
-    }
-
-    if (changed) {
-      setAlerts(next);
-      try { localStorage.setItem('wt-alerts', JSON.stringify(next)); }
-      catch {}
-    }
-  }, [monitors]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Persist history window choice ─────────────────────────────────────────
   useEffect(() => {
@@ -140,8 +100,8 @@ export default function App() {
     return 0; // default: server creation order
   });
 
-  const activeAlerts  = alerts.filter(a => !a.dismissed);
-  const ongoingCount  = activeAlerts.filter(a => !a.upAt).length;
+  // Active = unresolved and not dismissed
+  const ongoingCount = alerts.filter(a => !a.resolvedAt && !a.dismissedAt).length;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -166,13 +126,6 @@ export default function App() {
     if (!window.confirm('Delete this monitor? This cannot be undone.')) return;
     try { await deleteMonitor(id); }
     catch (err) { console.error('[watchtower] delete failed:', err); alert(`Failed to delete: ${err.message}`); }
-  };
-
-  const dismissAlert = (alertId) => {
-    const updated = alerts.map(a => a.id === alertId ? { ...a, dismissed: true } : a);
-    setAlerts(updated);
-    try { localStorage.setItem('wt-alerts', JSON.stringify(updated)); }
-    catch {}
   };
 
   const toggleTag = (tag) =>
@@ -294,8 +247,9 @@ export default function App() {
         {/* Alerts panel */}
         {showAlerts && (
           <AlertsPanel
-            alerts={activeAlerts}
+            alerts={alerts}
             onDismiss={dismissAlert}
+            onDismissAll={dismissAll}
             onClose={() => setShowAlerts(false)}
           />
         )}

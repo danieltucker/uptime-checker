@@ -1,5 +1,5 @@
 /**
- * Alert dispatcher — sends outage and recovery notifications.
+ * Alert dispatcher — sends outage, degraded, and recovery notifications.
  *
  * Each channel (Telegram, Email, Twilio) is independently enabled via settings.
  * Per-monitor alertTypes controls which channels fire for that monitor:
@@ -7,6 +7,8 @@
  *   'Email'    → email (SMTP) channel
  *   'SMS'      → Twilio SMS channel
  *   'None'     → no alerts
+ *
+ * event values: 'down' | 'degraded' | 'recovered'
  */
 
 import got        from 'got';
@@ -16,24 +18,40 @@ import { getSetting } from './db/index.js';
 // ── Message formatting ────────────────────────────────────────────────────────
 
 function subject(monitor, event) {
-  return `[WatchTower] ${monitor.label} is ${event === 'down' ? 'DOWN' : 'RECOVERED'}`;
+  const label = {
+    down:      'DOWN',
+    degraded:  'DEGRADED',
+    recovered: 'RECOVERED',
+  }[event] ?? event.toUpperCase();
+  return `[WatchTower] ${monitor.label} is ${label}`;
 }
 
 function plainText(monitor, event) {
-  const status = event === 'down' ? 'DOWN' : 'RECOVERED';
+  const status = {
+    down:      'DOWN',
+    degraded:  `DEGRADED (ping over ${monitor.degradedThreshold ?? '?'}ms threshold)`,
+    recovered: 'RECOVERED',
+  }[event] ?? event.toUpperCase();
   return `WatchTower Alert\n\n${monitor.label} is ${status}\nTarget: ${monitor.target}\nTime: ${new Date().toLocaleString()}`;
 }
 
 function htmlBody(monitor, event) {
-  const isDown  = event === 'down';
-  const color   = isDown ? '#ef4444' : '#22c55e';
-  const status  = isDown ? 'DOWN' : 'RECOVERED';
+  const color = { down: '#ef4444', degraded: '#f59e0b', recovered: '#22c55e' }[event] ?? '#6b7280';
+  const status = {
+    down:      'DOWN',
+    degraded:  `DEGRADED`,
+    recovered: 'RECOVERED',
+  }[event] ?? event.toUpperCase();
+  const detail = event === 'degraded' && monitor.degradedThreshold
+    ? `<div>Threshold: <span style="color:#e6edf3">${monitor.degradedThreshold}ms</span></div>`
+    : '';
   return `
     <div style="font-family:monospace;max-width:480px;padding:24px;background:#0d1117;color:#e6edf3;border-radius:8px">
       <div style="font-size:11px;letter-spacing:0.1em;color:#6e7681;margin-bottom:16px">WATCHTOWER ALERT</div>
       <div style="font-size:20px;font-weight:bold;color:${color};margin-bottom:12px">${monitor.label} is ${status}</div>
       <div style="font-size:13px;color:#8d96a0;line-height:1.6">
         <div>Target: <span style="color:#e6edf3">${monitor.target}</span></div>
+        ${detail}
         <div>Time: <span style="color:#e6edf3">${new Date().toLocaleString()}</span></div>
       </div>
     </div>
@@ -43,14 +61,16 @@ function htmlBody(monitor, event) {
 // ── Telegram ──────────────────────────────────────────────────────────────────
 
 export async function sendTelegramAlert(monitor, event, overrides = {}) {
-  const token  = overrides.telegram_token  ?? getSetting('telegram_token');
+  const token  = overrides.telegram_token   ?? getSetting('telegram_token');
   const chatId = overrides.telegram_chat_id ?? getSetting('telegram_chat_id');
   if (!token)  throw new Error('Telegram bot token is not configured');
   if (!chatId) throw new Error('Telegram chat ID is not configured');
 
-  const isDown = event === 'down';
-  const icon   = isDown ? '🔴' : '🟢';
-  const text   = `${icon} <b>WatchTower</b>\n\n<b>${monitor.label}</b> is <b>${isDown ? 'DOWN' : 'RECOVERED'}</b>\n<code>${monitor.target}</code>\n${new Date().toLocaleString()}`;
+  const icon = { down: '🔴', degraded: '🟡', recovered: '🟢' }[event] ?? '⚪';
+  const statusText = { down: 'DOWN', degraded: 'DEGRADED', recovered: 'RECOVERED' }[event] ?? event.toUpperCase();
+  const detail = event === 'degraded' && monitor.degradedThreshold
+    ? `\nThreshold: ${monitor.degradedThreshold}ms` : '';
+  const text = `${icon} <b>WatchTower</b>\n\n<b>${monitor.label}</b> is <b>${statusText}</b>\n<code>${monitor.target}</code>${detail}\n${new Date().toLocaleString()}`;
 
   await got.post(`https://api.telegram.org/bot${token}/sendMessage`, {
     json: { chat_id: chatId, text, parse_mode: 'HTML' },
@@ -111,10 +131,8 @@ export async function sendTwilioAlert(monitor, event, overrides = {}) {
 }
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────
-// Fires all channels that are both globally enabled and listed in the
-// monitor's alertTypes array.
 
-export async function dispatchAlerts(monitor, event) {
+export async function dispatchAlerts(monitor, event, overrides = {}) {
   const types = monitor.alertTypes ?? [];
   if (types.includes('None') && types.length === 1) return;
 
@@ -122,19 +140,19 @@ export async function dispatchAlerts(monitor, event) {
 
   if (types.includes('Telegram') && getSetting('telegram_enabled') === '1') {
     tasks.push(
-      sendTelegramAlert(monitor, event)
+      sendTelegramAlert(monitor, event, overrides)
         .catch(e => console.error(`[alerter] Telegram failed for ${monitor.label}:`, e.message))
     );
   }
   if (types.includes('Email') && getSetting('email_enabled') === '1') {
     tasks.push(
-      sendEmailAlert(monitor, event)
+      sendEmailAlert(monitor, event, overrides)
         .catch(e => console.error(`[alerter] Email failed for ${monitor.label}:`, e.message))
     );
   }
   if (types.includes('SMS') && getSetting('twilio_enabled') === '1') {
     tasks.push(
-      sendTwilioAlert(monitor, event)
+      sendTwilioAlert(monitor, event, overrides)
         .catch(e => console.error(`[alerter] Twilio failed for ${monitor.label}:`, e.message))
     );
   }

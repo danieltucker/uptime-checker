@@ -5,6 +5,7 @@ import { sseHandler }   from './sse.js';
 import { initScheduler } from './scheduler.js';
 import monitorsRouter   from './routes/monitors.js';
 import settingsRouter   from './routes/settings.js';
+import alertsRouter     from './routes/alerts.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT      = process.env.PORT ?? 3000;
@@ -26,6 +27,9 @@ app.use('/api/monitors', monitorsRouter);
 
 // Alert channel configuration
 app.use('/api/settings', settingsRouter);
+
+// Alert history + dismiss
+app.use('/api/alerts', alertsRouter);
 
 // Fallback: let the React router handle all non-API paths
 app.get('*', (_req, res) => {

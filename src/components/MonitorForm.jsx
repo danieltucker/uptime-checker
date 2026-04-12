@@ -3,16 +3,36 @@ import { X, Plus, Save, Loader, Tag } from 'lucide-react';
 import { INTERVAL_OPTIONS, ALERT_TYPES, CHECK_TYPES } from '../types/monitor';
 import { useTheme } from '../hooks/useTheme';
 
+const DEFAULT_ALERT_CONFIG = {
+  outage:    { panel: true,  notify: 'once'  },
+  degraded:  { panel: false, notify: 'never' },
+  recovered: { panel: true,  notify: 'once'  },
+};
+
+const NOTIFY_OPTIONS = [
+  { label: 'Never',        value: 'never'  },
+  { label: 'Once',         value: 'once'   },
+  { label: 'Every 15 min', value: 'repeat' },
+];
+
+const ALERT_ROWS = [
+  { key: 'outage',    label: 'Outage',    hint: 'service is DOWN' },
+  { key: 'degraded',  label: 'Degraded',  hint: 'ping over threshold' },
+  { key: 'recovered', label: 'Recovered', hint: 'back to healthy' },
+];
+
 const DEFAULT_FORM = {
-  target:      '',
-  label:       '',
-  description: '',
-  checkType:   'http',
-  port:        '',
-  interval:    60,
-  alertTypes:  ['None'],
-  tags:        [],          // stored as string[] internally
-  tagInput:    '',          // the text field value
+  target:           '',
+  label:            '',
+  description:      '',
+  checkType:        'http',
+  port:             '',
+  interval:         60,
+  alertTypes:       ['None'],
+  degradedThreshold: '',
+  alertConfig:      DEFAULT_ALERT_CONFIG,
+  tags:             [],
+  tagInput:         '',
 };
 
 export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = false, allTags = [] }) {
@@ -26,16 +46,24 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
 
   useEffect(() => {
     if (editingMonitor) {
+      const rawCfg = editingMonitor.alertConfig ?? {};
+      const alertConfig = {
+        outage:    { ...DEFAULT_ALERT_CONFIG.outage,    ...(rawCfg.outage    || {}) },
+        degraded:  { ...DEFAULT_ALERT_CONFIG.degraded,  ...(rawCfg.degraded  || {}) },
+        recovered: { ...DEFAULT_ALERT_CONFIG.recovered, ...(rawCfg.recovered || {}) },
+      };
       setForm({
-        target:      editingMonitor.target,
-        label:       editingMonitor.label,
-        description: editingMonitor.description,
-        checkType:   editingMonitor.checkType ?? 'http',
-        port:        editingMonitor.port ?? '',
-        interval:    editingMonitor.interval,
-        alertTypes:  editingMonitor.alertTypes,
-        tags:        editingMonitor.tags.filter(t => t !== '_ref'),
-        tagInput:    '',
+        target:            editingMonitor.target,
+        label:             editingMonitor.label,
+        description:       editingMonitor.description,
+        checkType:         editingMonitor.checkType ?? 'http',
+        port:              editingMonitor.port ?? '',
+        interval:          editingMonitor.interval,
+        alertTypes:        editingMonitor.alertTypes,
+        degradedThreshold: editingMonitor.degradedThreshold ?? '',
+        alertConfig,
+        tags:              editingMonitor.tags.filter(t => t !== '_ref'),
+        tagInput:          '',
       });
     } else {
       setForm(DEFAULT_FORM);
@@ -105,22 +133,32 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
+  const setAlertConfig = (type, key, value) =>
+    setForm(prev => ({
+      ...prev,
+      alertConfig: {
+        ...prev.alertConfig,
+        [type]: { ...prev.alertConfig[type], [key]: value },
+      },
+    }));
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.target.trim()) return;
-    // Commit any in-progress tag text
     const finalTags = form.tagInput.trim()
       ? [...new Set([...form.tags, form.tagInput.trim()])]
       : form.tags;
     onSubmit({
-      target:      form.target.trim(),
-      label:       form.label.trim(),
-      description: form.description.trim(),
-      checkType:   form.checkType,
-      port:        form.checkType === 'tcp' && form.port ? Number(form.port) : null,
-      interval:    form.interval,
-      alertTypes:  form.alertTypes,
-      tags:        finalTags,
+      target:            form.target.trim(),
+      label:             form.label.trim(),
+      description:       form.description.trim(),
+      checkType:         form.checkType,
+      port:              form.checkType === 'tcp' && form.port ? Number(form.port) : null,
+      interval:          form.interval,
+      alertTypes:        form.alertTypes,
+      degradedThreshold: form.degradedThreshold !== '' ? Number(form.degradedThreshold) : null,
+      alertConfig:       form.alertConfig,
+      tags:              finalTags,
     });
   };
 
@@ -318,7 +356,7 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
           </div>
 
           {/* Alert types */}
-          <Field label="Alert Types" hint="configure channels in Settings" t={t}>
+          <Field label="Notification Channels" hint="configure credentials in Settings" t={t}>
             <div className="flex flex-wrap gap-2 pt-0.5">
               {ALERT_TYPES.map(type => {
                 const active = form.alertTypes.includes(type);
@@ -331,6 +369,78 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
                     }>
                     {type}
                   </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          {/* Degraded threshold — HTTP only */}
+          {form.checkType === 'http' && (
+            <Field label="Degraded Threshold" hint="ms — leave blank to disable" t={t}>
+              <input type="number" min={1} max={60000}
+                value={form.degradedThreshold}
+                onChange={e => set('degradedThreshold', e.target.value)}
+                placeholder="e.g. 500"
+                className={inputCls} style={inputStyle}
+                onFocus={e => e.target.style.borderColor = '#f59e0b'}
+                onBlur={e  => e.target.style.borderColor = t.cardBorder}
+              />
+            </Field>
+          )}
+
+          {/* Alert behaviour per event type */}
+          <Field label="Alert Behaviour" t={t}>
+            <div className="rounded border overflow-hidden" style={{ borderColor: t.cardBorder }}>
+              {/* Header row */}
+              <div className="grid grid-cols-3 px-3 py-1.5 border-b text-xs font-mono uppercase tracking-wider"
+                style={{ borderColor: t.cardBorder, backgroundColor: t.metricGap, color: t.textFaint }}>
+                <span>Event</span>
+                <span className="text-center">Show in Panel</span>
+                <span className="text-center">Notify</span>
+              </div>
+              {ALERT_ROWS.map(({ key, label, hint }) => {
+                const cfg = form.alertConfig[key];
+                return (
+                  <div key={key}
+                    className="grid grid-cols-3 items-center px-3 py-2 border-b last:border-0"
+                    style={{ borderColor: t.cardBorder }}>
+
+                    {/* Label */}
+                    <div>
+                      <div className="text-xs font-mono" style={{ color: t.textSecondary }}>{label}</div>
+                      <div className="text-xs font-mono" style={{ color: t.textFaint }}>{hint}</div>
+                    </div>
+
+                    {/* Panel toggle */}
+                    <div className="flex justify-center">
+                      <button type="button"
+                        onClick={() => setAlertConfig(key, 'panel', !cfg.panel)}
+                        className="w-9 h-5 rounded-full border transition-colors relative"
+                        style={{
+                          backgroundColor: cfg.panel ? 'rgba(59,130,246,0.3)' : t.tagBg,
+                          borderColor:     cfg.panel ? 'rgba(59,130,246,0.6)' : t.tagBorder,
+                        }}>
+                        <span className="absolute top-0.5 h-4 w-4 rounded-full transition-all"
+                          style={{
+                            left:            cfg.panel ? '18px' : '2px',
+                            backgroundColor: cfg.panel ? '#3b82f6' : t.textFaint,
+                          }} />
+                      </button>
+                    </div>
+
+                    {/* Notify frequency */}
+                    <div className="flex justify-center">
+                      <select
+                        value={cfg.notify}
+                        onChange={e => setAlertConfig(key, 'notify', e.target.value)}
+                        className="text-xs font-mono rounded border px-1.5 py-0.5 appearance-none cursor-pointer focus:outline-none"
+                        style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
+                        {NOTIFY_OPTIONS.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 );
               })}
             </div>

@@ -4,17 +4,155 @@
  * on the next check without restarting the server) then runs the appropriate
  * checker and persists + broadcasts the result.
  *
- * Alert state is tracked in memory. On server startup it is seeded from the
- * last known check result so a restart doesn't re-fire stale alerts.
+ * Alert state is stored in the database (alerts table).  Three event types:
+ *   outage   — monitor is DOWN
+ *   degraded — monitor is UP but ping exceeds degraded_threshold
+ *   (resolved outage/degraded shows as "recovered" in the UI)
+ *
+ * Dismiss behaviour: when a check confirms the bad state is ongoing the alert's
+ * dismissed_at is reset to NULL so it re-surfaces in the panel.
  */
 
-import { db, rowToMonitor } from './db/index.js';
+import { randomUUID }       from 'node:crypto';
+import { db, rowToMonitor, rowToAlert } from './db/index.js';
 import { runCheck }         from './checkers/index.js';
 import { broadcast }        from './sse.js';
 import { dispatchAlerts }   from './alerter.js';
 
-const timers      = new Map(); // monitorId → NodeJS.Timer
-const alertStates = new Map(); // monitorId → 'up' | 'down' | null
+const timers = new Map(); // monitorId → NodeJS.Timer
+
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
+
+// ── Alert config helpers ──────────────────────────────────────────────────────
+
+function parseAlertConfig(monitor) {
+  let cfg = {};
+  try { cfg = JSON.parse(monitor.alertConfig || '{}'); } catch {}
+  return {
+    outage:    { panel: true,  notify: 'once',  ...(cfg.outage    || {}) },
+    degraded:  { panel: false, notify: 'never', ...(cfg.degraded  || {}) },
+    recovered: { panel: true,  notify: 'once',  ...(cfg.recovered || {}) },
+  };
+}
+
+function buildAlertPayload(alertId) {
+  const row = db.prepare(`
+    SELECT a.*, m.label AS monitor_label, m.target AS monitor_target
+    FROM   alerts a JOIN monitors m ON a.monitor_id = m.id
+    WHERE  a.id = ?
+  `).get(alertId);
+  return row ? rowToAlert(row) : null;
+}
+
+function shouldRepeatNotify(notifyMode, notifiedAt) {
+  if (notifyMode !== 'repeat') return false;
+  if (!notifiedAt) return true;
+  return Date.now() - new Date(notifiedAt).getTime() > FIFTEEN_MINUTES;
+}
+
+// ── Alert state machine ───────────────────────────────────────────────────────
+
+function handleAlertLogic(monitor, result, now) {
+  const cfg    = parseAlertConfig(monitor);
+  const isDown = result.status === 'down';
+  const isDegraded = !isDown
+    && monitor.degradedThreshold != null
+    && result.totalMs != null
+    && result.totalMs > monitor.degradedThreshold;
+
+  const activeAlert = db.prepare(`
+    SELECT * FROM alerts
+    WHERE  monitor_id = ? AND resolved_at IS NULL
+    ORDER  BY started_at DESC LIMIT 1
+  `).get(monitor.id);
+
+  // ── Service is DOWN ───────────────────────────────────────────────────────
+  if (isDown) {
+    if (activeAlert?.type === 'outage') {
+      // Still down — reset dismissed so it re-surfaces, update last_occurred
+      db.prepare(`
+        UPDATE alerts SET last_occurred_at = ?, dismissed_at = NULL WHERE id = ?
+      `).run(now, activeAlert.id);
+
+      if (shouldRepeatNotify(cfg.outage.notify, activeAlert.notified_at)) {
+        dispatchAlerts(monitor, 'down').catch(console.error);
+        db.prepare('UPDATE alerts SET notified_at = ? WHERE id = ?').run(now, activeAlert.id);
+      }
+
+      broadcast('alert:updated', buildAlertPayload(activeAlert.id));
+    } else {
+      // New outage (or transition from degraded → outage)
+      if (activeAlert) {
+        // Resolve the previous degraded alert
+        db.prepare('UPDATE alerts SET resolved_at = ? WHERE id = ?').run(now, activeAlert.id);
+        broadcast('alert:resolved', buildAlertPayload(activeAlert.id));
+        if (cfg.recovered.notify !== 'never') {
+          dispatchAlerts(monitor, 'recovered').catch(console.error);
+        }
+      }
+
+      const id = randomUUID();
+      db.prepare(`
+        INSERT INTO alerts (id, monitor_id, type, started_at, last_occurred_at)
+        VALUES (?, ?, 'outage', ?, ?)
+      `).run(id, monitor.id, now, now);
+
+      if (cfg.outage.notify !== 'never') {
+        dispatchAlerts(monitor, 'down').catch(console.error);
+        db.prepare('UPDATE alerts SET notified_at = ? WHERE id = ?').run(now, id);
+      }
+
+      broadcast('alert:new', buildAlertPayload(id));
+    }
+
+  // ── Service is DEGRADED ───────────────────────────────────────────────────
+  } else if (isDegraded) {
+    if (activeAlert?.type === 'degraded') {
+      db.prepare(`
+        UPDATE alerts SET last_occurred_at = ?, dismissed_at = NULL WHERE id = ?
+      `).run(now, activeAlert.id);
+
+      if (shouldRepeatNotify(cfg.degraded.notify, activeAlert.notified_at)) {
+        dispatchAlerts(monitor, 'degraded').catch(console.error);
+        db.prepare('UPDATE alerts SET notified_at = ? WHERE id = ?').run(now, activeAlert.id);
+      }
+
+      broadcast('alert:updated', buildAlertPayload(activeAlert.id));
+    } else {
+      // New degraded (or transition from outage → degraded)
+      if (activeAlert) {
+        db.prepare('UPDATE alerts SET resolved_at = ? WHERE id = ?').run(now, activeAlert.id);
+        broadcast('alert:resolved', buildAlertPayload(activeAlert.id));
+        if (cfg.recovered.notify !== 'never') {
+          dispatchAlerts(monitor, 'recovered').catch(console.error);
+        }
+      }
+
+      const id = randomUUID();
+      db.prepare(`
+        INSERT INTO alerts (id, monitor_id, type, started_at, last_occurred_at)
+        VALUES (?, ?, 'degraded', ?, ?)
+      `).run(id, monitor.id, now, now);
+
+      if (cfg.degraded.notify !== 'never') {
+        dispatchAlerts(monitor, 'degraded').catch(console.error);
+        db.prepare('UPDATE alerts SET notified_at = ? WHERE id = ?').run(now, id);
+      }
+
+      broadcast('alert:new', buildAlertPayload(id));
+    }
+
+  // ── Service is HEALTHY ────────────────────────────────────────────────────
+  } else {
+    if (activeAlert) {
+      db.prepare('UPDATE alerts SET resolved_at = ? WHERE id = ?').run(now, activeAlert.id);
+      if (cfg.recovered.notify !== 'never') {
+        dispatchAlerts(monitor, 'recovered').catch(console.error);
+      }
+      broadcast('alert:resolved', buildAlertPayload(activeAlert.id));
+    }
+  }
+}
 
 // ── Core check execution ──────────────────────────────────────────────────────
 
@@ -57,14 +195,10 @@ export async function executeCheck(monitor) {
     ? Math.round((upCount / history.length) * 1000) / 10
     : 100;
 
-  // Alert dispatch — fire on first DOWN, fire again on RECOVERY
-  const prev = alertStates.get(monitor.id);
-  if (result.status === 'down' && prev !== 'down') {
-    dispatchAlerts(monitor, 'down').catch(console.error);
-  } else if (result.status === 'up' && prev === 'down') {
-    dispatchAlerts(monitor, 'recovered').catch(console.error);
+  // Alert logic (skip reference monitors)
+  if (!monitor.tags?.includes('_ref')) {
+    handleAlertLogic(monitor, result, checkedAt);
   }
-  alertStates.set(monitor.id, result.status);
 
   // Push real-time update to all connected browsers
   broadcast('monitor:checked', {
@@ -112,16 +246,10 @@ export function stopMonitor(id) {
   if (timer) { clearInterval(timer); timers.delete(id); }
 }
 
-/** Restore schedules on startup. Seeds alert state from last known check so
- *  a server restart doesn't re-trigger alerts for already-down monitors. */
+/** Restore schedules on startup. */
 export function initScheduler() {
   const monitors = db.prepare('SELECT * FROM monitors').all().map(rowToMonitor);
   for (const m of monitors) {
-    const last = db.prepare(`
-      SELECT status FROM check_history
-      WHERE monitor_id = ? ORDER BY checked_at DESC LIMIT 1
-    `).get(m.id);
-    alertStates.set(m.id, last?.status ?? null);
     scheduleMonitor(m.id, m.interval);
   }
   console.log(`[scheduler] ${monitors.length} monitor(s) scheduled`);
