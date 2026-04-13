@@ -1,189 +1,130 @@
-# WatchTower - Uptime Monitor
+# WatchTower
 
-WatchTower is a self-hosted uptime monitoring dashboard built for developers, homelabbers, and small teams who want visibility into their infrastructure without the overhead of a full observability stack.
+**Self-hosted uptime monitoring for developers, homelabbers, and small teams.**
 
-Run it on a Raspberry Pi, a home server, or a cheap VPS and get instant visibility into everything on your network - from public-facing APIs and websites to internal services like a Plex server, a NAS, a router, a local database port, or a self-hosted app behind a reverse proxy. It's equally at home tracking a handful of production services for a side project or watching dozens of hosts across a homelab.
+WatchTower makes real HTTP(S), TCP, and ICMP checks on configurable intervals, stores the results in SQLite, and pushes every result to the browser the instant it lands via Server-Sent Events. No polling, no page refreshes. When something goes down you know immediately - and when it comes back up, you know that too.
 
-Under the hood it makes real HTTP(S), TCP, and ICMP checks on configurable intervals and stores the results in SQLite. The browser connects via Server-Sent Events so every check result appears on screen the moment it lands - no page refresh, no polling. When a host goes down, an alert is raised immediately with a live elapsed-time counter; when it recovers, the alert is marked resolved with total downtime recorded. A built-in Network Reference strip (Google, Cloudflare, 8.8.8.8) runs alongside your monitors so you can tell at a glance whether an outage is on your end or theirs.
+Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing APIs and websites just as well as internal services like a Plex server, a NAS, a database port, or a self-hosted app behind a reverse proxy.
 
-The whole stack ships as a single Docker Compose service - build, run, and forget. SQLite data is mounted on a named volume so check history survives container restarts.
-
-![Status: Active](https://img.shields.io/badge/status-active-green)
+![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
 ![Version](https://img.shields.io/badge/version-3.0-blue)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-![WatchTower dashboard screenshot](screenshot.png)
+![WatchTower dashboard](images/screenshot.png)
+
+---
 
 ## Features
 
-- **Add monitors** - track any IP address or domain name
-- **Three check types** - HTTP(S) with timing breakdown, TCP port reachability, ICMP ping
-- **Real checks** - actual network requests, not simulated data
-- **Live dashboard** - cards update in real time via Server-Sent Events (no polling)
-- **Detailed timing** - DNS, TCP, TLS, and TTFB measured separately for HTTP checks
-- **SSL certificate monitoring** - days until expiry shown on HTTPS monitors
-- **Graphical sparkline tooltip** - hover shows DNS/TCP/TLS/TTFB as proportional colored bars with ms labels; aggregated windows show avg ping and per-bucket uptime
-- **Time-based history window** - choose 1h (raw), 12h (15-min buckets), 1d (1-hour buckets), or 1w (6-hour buckets); the sparkline, uptime percentage, and tooltip all reflect the selected window; persists across sessions
-- **Uptime percentage** - calculated from the selected history window so the number always matches what you are looking at
-- **Summary bar** - total monitors, online/offline count, average ping across all hosts
-- **Status badges** - UP (green), DOWN (red + pulse), PENDING (amber)
-- **Sorting** - sort the monitor grid by uptime (worst first, to surface problems) or average ping (slowest first); default preserves creation order
-- **Tag filtering** - filter the dashboard grid by one or more tags; multiple tags use OR logic
-- **Tag autocomplete** - the tag input suggests existing tags as you type and lets you create new ones
-- **Edit / Delete** - update any monitor config; changes take effect on the next check
-- **Alerts panel** - bell icon shows active and resolved outage alerts; ongoing alerts display a live elapsed-time counter; dismissed individually or all at once; persists across reloads
-- **Network Reference section** - Google, Cloudflare (1.1.1.1), Google DNS (8.8.8.8), and Cloudflare.com are auto-seeded on first run and shown in a compact strip at the bottom of the dashboard to help distinguish app-level failures from network-level ones
-- **Alert notifications** - Telegram (free), Email via SMTP, and SMS via Twilio; configure credentials in the Settings panel; per-monitor alert type selection; test each channel before saving
-- **Embeddable views** - embed any individual monitor as a 360x230 iframe widget, or embed the full read-only dashboard; copy the iframe code from the embed button on any card or in the header; embedded views receive live SSE updates and have no edit, delete, or settings controls
-- **Dark / Light theme** - toggle with the sun/moon button in the header; preference persists in localStorage
-- **Persistent storage** - all monitors, check history, and alert settings survive restarts (SQLite)
+### Monitoring
+- **Three check types** - HTTP(S) with full timing breakdown, TCP port reachability, ICMP ping
+- **Live dashboard** - cards update in real time via Server-Sent Events
+- **Time-based history** - view 1h (raw), 12h, 1d, or 1w of history; sparklines and uptime % always match the selected window
+- **Detailed HTTP timing** - DNS, TCP, TLS, and TTFB measured and displayed separately
+- **SSL certificate monitoring** - days until expiry shown on every HTTPS monitor
+- **Summary bar** - total monitors, online/offline count, and average ping at a glance
+- **Network Reference strip** - Google, Cloudflare (1.1.1.1), Google DNS (8.8.8.8), and Cloudflare.com auto-seeded on first run so you can tell at a glance whether an outage is yours or theirs
+
+### Organization
+- **Tags** - freeform labels with autocomplete; filter the grid by one or more tags (OR logic)
+- **Sorting** - by uptime (worst first) or average ping (slowest first)
+- **Compact reference cards** - reference monitors render in a smaller footprint so they don't crowd your real monitors
+
+### Alerts
+- **In-app alert panel** - bell icon surfaces active outages with a live elapsed-time counter; resolved alerts show total downtime; dismiss individually or all at once
+- **Telegram** - free push notifications via Telegram Bot API
+- **Email** - SMTP delivery; works with Gmail App Passwords, Brevo, Resend, or any relay
+- **SMS** - Twilio integration (~$0.008/message)
+- **Test before saving** - send a test alert with your current form values without committing to save
+
+### Embed
+- **Per-monitor widget** - 360x230 iframe showing a single card with live updates
+- **Full dashboard** - read-only iframe view of the entire dashboard; no edit, delete, or settings controls
+
+### Other
+- **Dark / Light theme** - toggle in the header; persists in localStorage
+- **Persistent storage** - monitors, check history, and alert credentials all survive restarts (SQLite)
+- **Docker Compose** - single service, named volume, ships ready to run
+
+---
+
+## Screenshots
+
+### HTTP Performance Breakdown
+
+Hover any sparkline bar to see the full HTTP timing breakdown - DNS, TCP, TLS, and TTFB rendered as proportional colored segments with millisecond labels. Aggregated windows (12h, 1d, 1w) show average ping and per-bucket uptime instead.
+
+![HTTP timing tooltip](images/http-performance.png)
+
+### Adding and Editing Monitors
+
+Configure the target URL or IP, check type, interval, tags, and which alert channels fire for this monitor. Tag autocomplete suggests existing labels as you type.
+
+![Edit monitor form](images/edit-monitor.png)
+
+### Alert Panel
+
+The bell icon in the header shows a count of active outages. Click it to expand the panel, which separates ongoing outages from degraded monitors and shows a live elapsed-time counter for anything still down.
+
+![Alerts panel](images/notifications.png)
+
+### Telegram Notifications
+
+DOWN, RECOVERED, and DEGRADED events are sent immediately to your configured channels. No polling interval - alerts fire the moment the check result lands.
+
+![Telegram notifications](images/telegram-notifications.png)
+
+---
 
 ## Check Types
 
 ### HTTP / HTTPS
 
-Sends a real HTTP or HTTPS request to a URL and measures the full request lifecycle — DNS resolution, TCP handshake, TLS negotiation, and time-to-first-byte. Checks for a successful response (2xx/3xx by default).
+Sends a real HTTP or HTTPS request and measures the full request lifecycle.
 
-**Best for:**
-- Public-facing websites and landing pages — confirm the page actually loads, not just that the port is open
-- REST APIs and webhooks — verify the endpoint returns a healthy status code
-- Services behind a reverse proxy (Nginx, Caddy, Traefik) — catches application-layer failures that a port check would miss
-- Anything with a TLS certificate — WatchTower shows days until expiry so you're never caught off-guard by a cert renewal failure
-- Third-party SaaS your app depends on (payment gateway, auth provider, CDN) — know before your users do
+**Best for:** public websites, REST APIs, reverse-proxied services, anything with a TLS certificate, third-party SaaS your app depends on.
 
-**What you get:** DNS ms, TCP ms, TLS ms, TTFB ms, HTTP status code, SSL expiry countdown.
-
----
+**You get:** DNS ms, TCP ms, TLS ms, TTFB ms, HTTP status code, SSL expiry countdown.
 
 ### TCP
 
-Opens a raw TCP connection to a host and port. No application-layer data is exchanged — success simply means the port accepted the connection.
+Opens a raw TCP connection to a host and port. No application-layer data exchanged - success means the port accepted the connection.
 
-**Best for:**
-- Databases (Postgres :5432, MySQL :3306, Redis :6379) — confirm the service is listening without needing credentials
-- Mail servers, LDAP, or any protocol that doesn't speak HTTP
-- Internal services that aren't exposed via a URL (a game server, a private API, a Docker container on a custom port)
-- Checking that a firewall rule or port-forward is working correctly
-- Load balancer health — verify backend nodes are up at the TCP level
+**Best for:** databases (Postgres :5432, MySQL :3306, Redis :6379), mail servers, internal services not exposed via URL, verifying firewall rules and port-forwards.
 
-**What you get:** connection latency in ms; no application-layer detail.
-
----
+**You get:** connection latency in ms.
 
 ### ICMP (Ping)
 
-Sends an ICMP echo request (ping) to a host. Measures raw round-trip latency with no concern for open ports or services.
+Sends an ICMP echo request. Measures raw round-trip latency with no concern for open ports or services.
 
-**Best for:**
-- Bare-metal servers and VMs — confirm the host is alive even if all services are down
-- Network equipment — routers, switches, access points, and managed PDUs that don't run web servers
-- NAS boxes, printers, and IoT devices on your LAN
-- Diagnosing latency rather than availability — e.g. tracking jitter on a home internet connection
-- The WatchTower Network Reference hosts (Google, Cloudflare DNS) use ICMP so you can compare your own hosts against known-good internet references
+**Best for:** bare-metal servers, network equipment (routers, switches, access points), NAS boxes, IoT devices, diagnosing latency vs availability.
 
-**Note:** ICMP requires the `NET_RAW` capability. The provided `docker-compose.yml` sets this automatically; running outside Docker may require `sudo` or `CAP_NET_RAW` on the Node process.
+> **Note:** ICMP requires the `NET_RAW` capability. The provided `docker-compose.yml` sets this automatically. Running outside Docker may require `sudo` or `CAP_NET_RAW` on the Node process.
 
-**What you get:** round-trip latency in ms; no port or application detail.
+**You get:** round-trip latency in ms.
 
 ---
-
-## Alert Notifications
-
-Open the Settings panel (gear icon in the header) to configure alert channels. You can test each channel before saving - credentials are sent with the test request so you don't need to save first.
-
-### Telegram (free)
-
-1. Message `@BotFather` on Telegram and create a new bot to get a token
-2. Message your bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` to find your chat ID
-3. Paste the token and chat ID into the Telegram section and enable the channel
-
-### Email (SMTP)
-
-Works with any SMTP relay - Gmail (use an App Password, not your account password), Brevo, Resend, or a self-hosted relay.
-
-| Field | Example |
-|-------|---------|
-| SMTP Host | `smtp.gmail.com` |
-| Port | `587` (STARTTLS) or `465` (SSL) |
-| Username | your email address |
-| Password | Gmail App Password or relay API key |
-| From | the sending address |
-| To | where alerts should land |
-
-### SMS via Twilio (paid)
-
-Requires a Twilio account and a purchased phone number (~$0.008/message).
-
-Paste your Account SID, Auth Token, and both phone numbers (E.164 format, e.g. `+15551234567`) into the Twilio section.
-
-## Embedding
-
-Click the `<>` icon on any monitor card to get iframe code for that monitor widget, or click the `<>` button in the header for the full read-only dashboard.
-
-```html
-<!-- Single monitor widget (360x230) -->
-<iframe
-  src="https://your-watchtower-host/embed/monitor/MONITOR_ID"
-  width="360"
-  height="230"
-  frameborder="0"
-  style="border-radius:8px;overflow:hidden"
-></iframe>
-
-<!-- Full dashboard -->
-<iframe
-  src="https://your-watchtower-host/embed"
-  width="100%"
-  height="600"
-  frameborder="0"
-  style="border-radius:8px;overflow:hidden"
-></iframe>
-```
-
-Embedded views receive live updates via SSE and have no edit, delete, or settings controls.
-
-## Tech Stack
-
-| Layer         | Library / Tool                        |
-|---------------|---------------------------------------|
-| UI            | React 18 (hooks + context)            |
-| Styling       | Tailwind CSS (CDN play script)        |
-| Charts        | recharts `AreaChart`                  |
-| Icons         | lucide-react                          |
-| Bundler       | Vite 5                                |
-| Backend       | Node.js 20 + Express 4                |
-| Database      | SQLite via better-sqlite3 (WAL mode)  |
-| HTTP checks   | got 13                                |
-| Real-time     | Server-Sent Events (EventSource API)  |
-| Email alerts  | nodemailer 8                          |
-| SMS alerts    | Twilio REST API (via got)             |
-| Chat alerts   | Telegram Bot API (via got)            |
-| Container     | Docker + Docker Compose               |
 
 ## Getting Started
 
 ### Docker (recommended)
 
-**Prerequisites:** Docker + Docker Compose
-
 ```bash
 docker compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The SQLite database is stored in a named volume (`watchtower-data`) so data survives container restarts.
+Open [http://localhost:3000](http://localhost:3000). Data is stored in a named volume (`watchtower-data`) and survives container restarts.
 
-### Development (local)
-
-**Prerequisites:** Node.js 20+
-
-Run the backend and frontend separately in two terminals:
+### Local development
 
 ```bash
-# Terminal 1 - backend (Express API on :3000)
+# Terminal 1 - backend (Express on :3000)
 cd server
 npm install
 npm run dev
 
-# Terminal 2 - frontend dev server (Vite on :5173, proxies /api to :3000)
+# Terminal 2 - frontend (Vite on :5173, proxies /api to :3000)
 npm install
 npm run dev
 ```
@@ -191,51 +132,128 @@ npm run dev
 Open [http://localhost:5173](http://localhost:5173).
 
 ```bash
-# Production build (outputs to server/public/, served by Express)
+# Production build - outputs to server/public/, served by Express
 npm run build
 ```
 
-## API
+---
 
-| Method | Path                          | Description                            |
-|--------|-------------------------------|----------------------------------------|
-| GET    | `/api/monitors`               | List all monitors with history         |
-| GET    | `/api/monitors/:id`           | Get a single monitor                   |
-| POST   | `/api/monitors`               | Create a monitor                       |
-| PUT    | `/api/monitors/:id`           | Update a monitor                       |
-| DELETE | `/api/monitors/:id`           | Delete a monitor                       |
-| POST   | `/api/monitors/:id/check`     | Trigger an immediate check             |
-| GET    | `/api/events`                 | SSE stream of check results            |
-| GET    | `/api/settings`               | Get alert channel configuration        |
-| PUT    | `/api/settings`               | Save alert channel configuration       |
-| POST   | `/api/settings/test/:channel` | Send a test alert (`telegram`, `email`, `twilio`) |
+## Alert Notifications
 
-### Monitor fields
+Open the Settings panel (gear icon in the header) to configure channels. Test any channel before saving - credentials in the form are sent with the test request.
 
-| Field         | Type                  | Description                                      |
-|---------------|-----------------------|--------------------------------------------------|
-| `target`      | string                | IP address, hostname, or URL                     |
-| `label`       | string                | Display name (defaults to target)                |
-| `description` | string                | Optional notes                                   |
-| `checkType`   | `http`\|`tcp`\|`icmp` | Check strategy                                   |
-| `interval`    | number (seconds)      | How often to run checks (default: 60)            |
-| `port`        | number                | Required for TCP checks                          |
-| `alertTypes`  | string[]              | `Email`, `SMS`, `Telegram`, `Webhook`, or `None` |
-| `tags`        | string[]              | Freeform grouping labels; `_ref` is reserved for built-in reference monitors |
+### Telegram (free)
+
+1. Message `@BotFather` on Telegram and create a bot to get a token
+2. Message your bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` to find your chat ID
+3. Paste the token and chat ID into the Telegram section and enable the channel
+
+### Email (SMTP)
+
+| Field    | Example                          |
+|----------|----------------------------------|
+| Host     | `smtp.gmail.com`                 |
+| Port     | `587` (STARTTLS) or `465` (SSL)  |
+| Username | your email address               |
+| Password | Gmail App Password or relay key  |
+| From     | the sending address              |
+| To       | where alerts should land         |
+
+Gmail users: use an [App Password](https://support.google.com/accounts/answer/185833), not your account password.
+
+### SMS via Twilio
+
+Requires a Twilio account and a purchased phone number (~$0.008/message). Paste your Account SID, Auth Token, and both phone numbers in E.164 format (e.g. `+15551234567`).
+
+---
+
+## Embedding
+
+Click the `<>` icon on any monitor card for a single-monitor widget, or click `<>` in the header for the full dashboard. Both tabs show a live URL preview and copyable iframe code.
+
+```html
+<!-- Single monitor widget -->
+<iframe
+  src="https://your-watchtower/embed/monitor/MONITOR_ID"
+  width="360" height="230" frameborder="0"
+  style="border-radius:8px;overflow:hidden"
+></iframe>
+
+<!-- Full read-only dashboard -->
+<iframe
+  src="https://your-watchtower/embed"
+  width="100%" height="600" frameborder="0"
+  style="border-radius:8px;overflow:hidden"
+></iframe>
+```
+
+Embedded views receive live SSE updates and have no edit, delete, or settings controls.
+
+---
+
+## API Reference
+
+| Method | Path                              | Description                                          |
+|--------|-----------------------------------|------------------------------------------------------|
+| GET    | `/api/monitors`                   | List all monitors with history (`?window=1h/12h/1d/1w`) |
+| GET    | `/api/monitors/:id`               | Get a single monitor                                 |
+| POST   | `/api/monitors`                   | Create a monitor                                     |
+| PUT    | `/api/monitors/:id`               | Update a monitor                                     |
+| DELETE | `/api/monitors/:id`               | Delete a monitor                                     |
+| POST   | `/api/monitors/:id/check`         | Trigger an immediate check                           |
+| GET    | `/api/events`                     | SSE stream of live check results                     |
+| GET    | `/api/settings`                   | Get alert channel configuration                      |
+| PUT    | `/api/settings`                   | Save alert channel configuration                     |
+| POST   | `/api/settings/test/:channel`     | Send a test alert (`telegram`, `email`, `twilio`)    |
+
+### Monitor schema
+
+| Field         | Type                      | Description                                                        |
+|---------------|---------------------------|--------------------------------------------------------------------|
+| `target`      | string                    | IP address, hostname, or URL                                       |
+| `label`       | string                    | Display name (defaults to target)                                  |
+| `description` | string                    | Optional notes shown on the card                                   |
+| `checkType`   | `http` / `tcp` / `icmp`  | Check strategy                                                     |
+| `interval`    | number (seconds)          | How often to run checks (default: 60)                              |
+| `port`        | number                    | Required for TCP checks                                            |
+| `alertTypes`  | string[]                  | `Email`, `SMS`, `Telegram`, `Webhook`, or `None`                   |
+| `tags`        | string[]                  | Freeform labels; `_ref` is reserved for built-in reference monitors |
+
+---
+
+## Tech Stack
+
+| Layer        | Library / Tool                       |
+|--------------|--------------------------------------|
+| UI           | React 18 (hooks + context)           |
+| Styling      | Tailwind CSS (CDN play script)       |
+| Charts       | recharts `AreaChart`                 |
+| Icons        | lucide-react                         |
+| Bundler      | Vite 5                               |
+| Backend      | Node.js 20 + Express 4               |
+| Database     | SQLite via better-sqlite3 (WAL mode) |
+| HTTP checks  | got 13                               |
+| Real-time    | Server-Sent Events (EventSource API) |
+| Email alerts | nodemailer 8                         |
+| SMS alerts   | Twilio REST API (via got)            |
+| Chat alerts  | Telegram Bot API (via got)           |
+| Container    | Docker + Docker Compose              |
+
+---
 
 ## Project Structure
 
 ```
 uptime-checker/
-├── Dockerfile                       # Multi-stage build (frontend -> server deps -> runtime)
+├── Dockerfile
 ├── docker-compose.yml
-├── index.html                       # Tailwind CDN, dark body background
+├── index.html
 ├── vite.config.js
+├── images/                          # README screenshots
 ├── src/                             # React frontend
-│   ├── main.jsx                     # Entry point, embed path detection, ThemeProvider
-│   ├── App.jsx                      # Root layout, tag filter, alerts, reference seeding
-│   ├── types/
-│   │   └── monitor.js               # Monitor schema + formatters
+│   ├── main.jsx                     # Entry point - embed path detection, ThemeProvider
+│   ├── App.jsx                      # Root layout, tag filter, alert tracking, seeding
+│   ├── types/monitor.js             # Monitor schema + formatters
 │   ├── hooks/
 │   │   ├── useMonitors.js           # REST + SSE state layer
 │   │   └── useTheme.jsx             # Dark/light theme context + token sets
@@ -246,30 +264,33 @@ uptime-checker/
 │       ├── AlertsPanel.jsx          # Dismissable outage alert panel
 │       ├── SettingsPanel.jsx        # Slide-out alert channel configuration
 │       ├── EmbedModal.jsx           # iframe code generator (widget + full dashboard)
-│       └── EmbedView.jsx            # Read-only embed routes (/embed, /embed/monitor/:id)
-└── server/                          # Node.js backend
+│       └── EmbedView.jsx            # Read-only routes (/embed, /embed/monitor/:id)
+└── server/
     ├── package.json
     └── src/
         ├── server.js                # Express app + static serving
-        ├── scheduler.js             # setInterval per monitor, alert state machine
+        ├── scheduler.js             # Per-monitor polling + alert state machine
         ├── alerter.js               # Telegram / Email / Twilio dispatch
         ├── sse.js                   # SSE broadcast to connected clients
-        ├── db/
-        │   └── index.js             # SQLite schema, migrations, settings helpers
+        ├── db/index.js              # SQLite schema, migrations, settings helpers
         ├── checkers/
-        │   ├── index.js             # Dispatcher (http / tcp / icmp)
-        │   ├── http.js              # got-based HTTP check with timing breakdown
+        │   ├── index.js             # Dispatcher
+        │   ├── http.js              # HTTP check with timing breakdown
         │   ├── tcp.js               # TCP port reachability
-        │   └── icmp.js              # ICMP ping (requires NET_RAW capability)
+        │   └── icmp.js              # ICMP ping (requires NET_RAW)
         └── routes/
-            ├── monitors.js          # CRUD endpoints + manual trigger + windowed history
-            └── settings.js          # Alert channel config + test endpoints
+            ├── monitors.js          # CRUD + manual trigger + windowed history
+            └── settings.js          # Alert config + test endpoints
 ```
+
+---
 
 ## Backlog
 
-- **HTTP response body validation** — allow an optional expected string or regex to be configured on HTTP monitors; if the response body doesn't match, the check is treated as DOWN even if the status code is 2xx. Useful for API `/health` endpoints that return `200 OK` with an error payload when a dependency is degraded.
-- **Hide unconfigured notification channels** — per-monitor alert type selection currently shows all channels (Email, SMS, Telegram) regardless of whether credentials have been saved in Settings. Only channels with valid saved credentials should be offered as options.
+- **HTTP response body validation** - optional expected string or regex on HTTP monitors; treat as DOWN if the body doesn't match even on a 2xx response. Useful for `/health` endpoints that return `200 OK` with a degraded payload.
+- **Hide unconfigured channels** - per-monitor alert type selection should only offer channels that have valid saved credentials in Settings.
+
+---
 
 ## License
 
