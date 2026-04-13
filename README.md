@@ -285,10 +285,48 @@ uptime-checker/
 
 ---
 
-## Backlog
+## Roadmap
+
+### v4 - Module System
+
+A plugin architecture that extends WatchTower beyond uptime monitoring. Modules render as cards in the same grid as monitors and follow the same visual language, but each module defines its own data fetching, display, and alert logic.
+
+#### Card layout and sorting
+
+- All cards (monitors and modules) share a single unified grid
+- Cards can be manually reordered by dragging
+- Cards are resizable on a grid system - each module defines a minimum size (e.g. 1 wide x 1 tall, 2 wide x 2 tall)
+- Resize behavior is responsive: a card set to 2 columns wide stays 2 columns on wide viewports, drops to full width on narrow ones; height is always respected
+
+#### Module contract
+
+Every module exposes a standard set of fields so the dashboard can render configuration forms and handle alerts consistently:
+
+| Field          | Description                                                                 |
+|----------------|-----------------------------------------------------------------------------|
+| `label`        | Display name shown in the card header                                       |
+| `description`  | Optional notes                                                              |
+| `interval`     | How often the module fetches data; module defines the allowed range         |
+| `tags`         | Freeform labels; works with the existing tag filter                         |
+| `alertTypes`   | `Email`, `SMS`, `Telegram`, `Webhook`, `Notification`, or `None`            |
+| `alertBehavior`| Module-defined thresholds that map to the standard down/degraded/recovered states, plus `Notification` for informational pushes that don't imply a failure |
+
+The `Notification` alert type is a fourth alert state available to modules for events that are worth surfacing (e.g. "usage crossed 80% of monthly quota") without implying the monitored thing is down.
+
+Module credentials are stored in the existing `settings` table under a namespaced prefix (`module.<id>.<key>`) and auto-render as a new section in the Settings panel.
+
+#### Bundled modules
+
+**Claude API Usage**
+Polls the Anthropic API for token usage and cost data. Displays current period spend, token counts by model, and a usage trend sparkline. Fires a `Notification` alert when usage crosses a configurable threshold.
+
+**Cloudflare Analytics**
+Queries the Cloudflare GraphQL Analytics API (`api.cloudflare.com/client/v4/graphql`) for a configured zone. Displays requests, pageviews, unique visitors, and bandwidth for the selected time window. Requires a Cloudflare API token with `Analytics:Read` permission and a Zone ID. Supports the same 1h/12h/1d/1w history windows as monitors.
+
+#### Monitor improvements
 
 - **HTTP response body validation** - optional expected string or regex on HTTP monitors; treat as DOWN if the body doesn't match even on a 2xx response. Useful for `/health` endpoints that return `200 OK` with a degraded payload.
-- **Hide unconfigured channels** - per-monitor alert type selection should only offer channels that have valid saved credentials in Settings.
+- **Hide unconfigured alert channels** - per-monitor alert type selection should only offer channels that have valid saved credentials in Settings.
 
 ---
 
