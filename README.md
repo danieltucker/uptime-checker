@@ -323,6 +323,20 @@ Polls the Anthropic API for token usage and cost data. Displays current period s
 **Cloudflare Analytics**
 Queries the Cloudflare GraphQL Analytics API (`api.cloudflare.com/client/v4/graphql`) for a configured zone. Displays requests, pageviews, unique visitors, and bandwidth for the selected time window. Requires a Cloudflare API token with `Analytics:Read` permission and a Zone ID. Supports the same 1h/12h/1d/1w history windows as monitors.
 
+#### Tag groups
+
+Tags become first-class objects on the dashboard. The default view collapses each tag into a single summary card rather than showing every monitor individually.
+
+- **Tag summary cards** - each tag renders as one card showing the tag name, the names of its members, an aggregate status (worst status wins - one DOWN member makes the group DOWN), member count, and a combined uptime figure
+- **Expand on click** - clicking a tag card or its label replaces it in the grid with all the individual member cards; clicking again collapses them back
+- **Untagged items** - monitors and modules with no tags always appear individually and are not grouped
+- **View toggle** - a setting in the configuration panel switches between grouped view (default) and flat view (all cards shown individually, current behavior); persists across sessions
+
+#### Settings panel
+
+- **Left-side tab navigation** - the settings panel gains a vertical tab list on the left edge for navigating between sections: General, Notifications (Telegram / Email / SMS), and one tab per installed module that requires credentials
+- **General tab** - houses dashboard-wide preferences including the grouped vs flat view toggle and any future display options
+
 #### Monitor improvements
 
 - **HTTP response body validation** - optional expected string or regex on HTTP monitors; treat as DOWN if the body doesn't match even on a 2xx response. Useful for `/health` endpoints that return `200 OK` with a degraded payload.
