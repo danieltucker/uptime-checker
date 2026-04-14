@@ -7,7 +7,7 @@ WatchTower makes real HTTP(S), TCP, and ICMP checks on configurable intervals, s
 Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing APIs and websites just as well as internal services like a Plex server, a NAS, a database port, or a self-hosted app behind a reverse proxy.
 
 ![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
-![Version](https://img.shields.io/badge/version-3.0-blue)
+![Version](https://img.shields.io/badge/version-4.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ![WatchTower dashboard](images/screenshot.png)
@@ -27,15 +27,22 @@ Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing
 
 ### Organization
 - **Tags** - freeform labels with autocomplete; filter the grid by one or more tags (OR logic)
-- **Sorting** - by uptime (worst first) or average ping (slowest first)
+- **Sorting** - by uptime (worst first), average ping (slowest first), or drag-to-reorder in default mode
+- **Drag-to-reorder** - grab any card header and drag to rearrange; order persists across sessions
+- **Resizable cards** - toggle any card between 1-column and 2-column width; persists across sessions
 - **Compact reference cards** - reference monitors render in a smaller footprint so they don't crowd your real monitors
 
 ### Alerts
 - **In-app alert panel** - bell icon surfaces active outages with a live elapsed-time counter; resolved alerts show total downtime; dismiss individually or all at once
+- **Three alert levels** - Outage, Degraded (configurable ping threshold), and Recovered; each with independent panel visibility and notification frequency (once / every 15 min)
 - **Telegram** - free push notifications via Telegram Bot API
 - **Email** - SMTP delivery; works with Gmail App Passwords, Brevo, Resend, or any relay
 - **SMS** - Twilio integration (~$0.008/message)
 - **Test before saving** - send a test alert with your current form values without committing to save
+
+### Settings
+- **Tabbed settings panel** - centered modal with General and Notifications tabs
+- **General tab** - dashboard-wide preferences including grouped vs flat view toggle
 
 ### Embed
 - **Per-monitor widget** - 360x230 iframe showing a single card with live updates
@@ -291,12 +298,19 @@ uptime-checker/
 
 A plugin architecture that extends WatchTower beyond uptime monitoring. Modules render as cards in the same grid as monitors and follow the same visual language, but each module defines its own data fetching, display, and alert logic.
 
-#### Card layout and sorting
+#### Card layout and sorting ✓ shipped
 
-- All cards (monitors and modules) share a single unified grid
-- Cards can be manually reordered by dragging
-- Cards are resizable on a grid system - each module defines a minimum size (e.g. 1 wide x 1 tall, 2 wide x 2 tall)
-- Resize behavior is responsive: a card set to 2 columns wide stays 2 columns on wide viewports, drops to full width on narrow ones; height is always respected
+- Cards can be manually reordered by dragging — grab anywhere in the card header and drop to rearrange; order persists in localStorage
+- Cards are resizable between 1-column and 2-column widths via the **Wide / Narrow** button in the card header; persists in localStorage
+- Resize is responsive: a 2-wide card stays 2 columns on wider viewports and collapses to full width on narrow ones
+- Drag-to-reorder is active in Default sort mode; switching to Uptime or Ping sort disables drag handles
+
+#### Settings panel ✓ shipped
+
+- Centered modal with left-side vertical tab navigation
+- **General tab** — dashboard-wide preferences including the grouped vs flat view toggle
+- **Notifications tab** — Telegram, Email, and SMS channel configuration (unchanged from v3)
+- Fixed 680 × 760px size; scrolls internally on smaller screens
 
 #### Module contract
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff } from 'lucide-react';
+import { X, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 
 const DEFAULT_SETTINGS = {
@@ -10,13 +10,21 @@ const DEFAULT_SETTINGS = {
   twilio_from: '', twilio_to: '',
 };
 
-export function SettingsPanel({ onClose }) {
-  const { t } = useTheme();
-  const [settings,  setSettings]  = useState(DEFAULT_SETTINGS);
-  const [saving,    setSaving]     = useState(false);
-  const [saved,     setSaved]      = useState(false);
-  const [testState, setTestState]  = useState({}); // channel → 'loading'|'ok'|'error'|message
-  const [showPass,  setShowPass]   = useState({});
+const TABS = [
+  { id: 'general',       label: 'General',       Icon: SlidersHorizontal },
+  { id: 'notifications', label: 'Notifications',  Icon: Bell    },
+];
+
+// ── SettingsPanel ─────────────────────────────────────────────────────────────
+
+export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) {
+  const { t, isDark } = useTheme();
+  const [activeTab,  setActiveTab]  = useState('general');
+  const [settings,   setSettings]   = useState(DEFAULT_SETTINGS);
+  const [saving,     setSaving]     = useState(false);
+  const [saved,      setSaved]      = useState(false);
+  const [testState,  setTestState]  = useState({});
+  const [showPass,   setShowPass]   = useState({});
 
   useEffect(() => {
     fetch('/api/settings')
@@ -63,219 +71,445 @@ export function SettingsPanel({ onClose }) {
     }
   };
 
-  const inputCls = 'w-full rounded border px-3 py-2 text-sm font-mono focus:outline-none transition-colors';
+  const inputCls   = 'w-full rounded-lg border px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/60 transition-all';
   const inputStyle = { backgroundColor: t.inputBg, color: t.textPrimary, borderColor: t.cardBorder };
 
+  // Subtle gradient overlay for the sidebar
+  const sidebarBg = isDark
+    ? 'linear-gradient(180deg, #1a2130 0%, #161b22 100%)'
+    : 'linear-gradient(180deg, #f0f3f7 0%, #eaeef2 100%)';
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end"
-      style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
 
-      <div className="h-full w-full max-w-md flex flex-col border-l shadow-2xl overflow-hidden"
-        style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+      {/* Modal */}
+      <div
+        className="flex rounded-2xl border shadow-2xl overflow-hidden"
+        style={{
+          backgroundColor: t.cardBg,
+          borderColor:     t.cardBorder,
+          width:           '100%',
+          maxWidth:        '760px',
+          height:          '680px',
+          boxShadow: isDark
+            ? '0 25px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)'
+            : '0 25px 80px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)',
+        }}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0"
-          style={{ borderColor: t.metricGap }}>
-          <h2 className="text-xs font-mono font-bold uppercase tracking-widest"
-            style={{ color: t.textSecondary }}>
-            // Alert Settings
-          </h2>
-          <button onClick={onClose} className="p-1.5 rounded opacity-50 hover:opacity-100"
-            style={{ color: t.textSecondary }}>
-            <X size={16} />
-          </button>
-        </div>
+        {/* ── Left sidebar ─────────────────────────────────────────────────── */}
+        <aside
+          className="flex flex-col shrink-0"
+          style={{ width: 200, background: sidebarBg, borderRight: `1px solid ${t.cardBorder}` }}>
 
-        {/* Channels */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-
-          {/* Telegram */}
-          <Channel
-            title="Telegram"
-            description="Free. Create a bot via @BotFather, then message it to get your chat ID."
-            enabled={settings.telegram_enabled === '1'}
-            onToggle={v => set('telegram_enabled', v ? '1' : '')}
-            testState={testState.telegram}
-            onTest={() => test('telegram')}
-            t={t}>
-            <Field label="Bot Token" t={t}>
-              <PasswordInput value={settings.telegram_token}
-                onChange={v => set('telegram_token', v)}
-                show={showPass.telegram_token}
-                onToggle={() => toggleShow('telegram_token')}
-                placeholder="123456:ABC-DEF..."
-                cls={inputCls} style={inputStyle} t={t} />
-            </Field>
-            <Field label="Chat ID" t={t}>
-              <input value={settings.telegram_chat_id}
-                onChange={e => set('telegram_chat_id', e.target.value)}
-                placeholder="-1001234567890"
-                className={inputCls} style={inputStyle} />
-            </Field>
-          </Channel>
-
-          {/* Email */}
-          <Channel
-            title="Email"
-            description="Sends via SMTP. Works with Gmail (use an App Password), Brevo, Resend, or any SMTP relay."
-            enabled={settings.email_enabled === '1'}
-            onToggle={v => set('email_enabled', v ? '1' : '')}
-            testState={testState.email}
-            onTest={() => test('email')}
-            t={t}>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="SMTP Host" t={t}>
-                <input value={settings.email_smtp_host}
-                  onChange={e => set('email_smtp_host', e.target.value)}
-                  placeholder="smtp.gmail.com"
-                  className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Port" t={t}>
-                <input value={settings.email_smtp_port}
-                  onChange={e => set('email_smtp_port', e.target.value)}
-                  placeholder="587"
-                  className={inputCls} style={inputStyle} />
-              </Field>
+          {/* Brand / title */}
+          <div className="px-5 pt-6 pb-4">
+            <div className="flex items-center gap-2.5 mb-1">
+              <Settings2 size={14} style={{ color: '#60a5fa' }} />
+              <span className="text-xs font-mono font-bold uppercase tracking-[0.15em]"
+                style={{ color: t.textSecondary }}>
+                Settings
+              </span>
             </div>
-            <Field label="Username" t={t}>
-              <input value={settings.email_smtp_user}
-                onChange={e => set('email_smtp_user', e.target.value)}
-                placeholder="you@gmail.com"
-                className={inputCls} style={inputStyle} />
-            </Field>
-            <Field label="Password / App Password" t={t}>
-              <PasswordInput value={settings.email_smtp_pass}
-                onChange={v => set('email_smtp_pass', v)}
-                show={showPass.email_smtp_pass}
-                onToggle={() => toggleShow('email_smtp_pass')}
-                placeholder="••••••••••••••••"
-                cls={inputCls} style={inputStyle} t={t} />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="From" t={t}>
-                <input value={settings.email_from}
-                  onChange={e => set('email_from', e.target.value)}
-                  placeholder="alerts@example.com"
-                  className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="To" t={t}>
-                <input value={settings.email_to}
-                  onChange={e => set('email_to', e.target.value)}
-                  placeholder="you@example.com"
-                  className={inputCls} style={inputStyle} />
-              </Field>
-            </div>
-          </Channel>
+            <div className="h-px mt-3" style={{ backgroundColor: t.cardBorder }} />
+          </div>
 
-          {/* Twilio SMS */}
-          <Channel
-            title="SMS via Twilio"
-            description="Paid per message (~$0.008/msg). Requires a Twilio account and a purchased phone number."
-            enabled={settings.twilio_enabled === '1'}
-            onToggle={v => set('twilio_enabled', v ? '1' : '')}
-            testState={testState.twilio}
-            onTest={() => test('twilio')}
-            t={t}>
-            <Field label="Account SID" t={t}>
-              <input value={settings.twilio_account_sid}
-                onChange={e => set('twilio_account_sid', e.target.value)}
-                placeholder="ACxxxxxxxxxxxxxxxx"
-                className={inputCls} style={inputStyle} />
-            </Field>
-            <Field label="Auth Token" t={t}>
-              <PasswordInput value={settings.twilio_auth_token}
-                onChange={v => set('twilio_auth_token', v)}
-                show={showPass.twilio_auth_token}
-                onToggle={() => toggleShow('twilio_auth_token')}
-                placeholder="••••••••••••••••"
-                cls={inputCls} style={inputStyle} t={t} />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="From Number" t={t}>
-                <input value={settings.twilio_from}
-                  onChange={e => set('twilio_from', e.target.value)}
-                  placeholder="+15551234567"
-                  className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="To Number" t={t}>
-                <input value={settings.twilio_to}
-                  onChange={e => set('twilio_to', e.target.value)}
-                  placeholder="+15559876543"
-                  className={inputCls} style={inputStyle} />
-              </Field>
-            </div>
-          </Channel>
-        </div>
+          {/* Tab list */}
+          <nav className="flex-1 px-3 space-y-0.5">
+            {TABS.map(({ id, label, Icon }) => {
+              const isActive = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-mono transition-all text-left"
+                  style={{
+                    color:           isActive ? '#60a5fa' : t.textMuted,
+                    backgroundColor: isActive
+                      ? isDark ? 'rgba(96,165,250,0.12)' : 'rgba(59,130,246,0.08)'
+                      : 'transparent',
+                    fontWeight:  isActive ? 600 : 400,
+                    borderLeft:  isActive ? '2px solid #60a5fa' : '2px solid transparent',
+                  }}>
+                  <Icon size={14} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.6 }} />
+                  {label}
+                </button>
+              );
+            })}
+          </nav>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t flex items-center justify-between shrink-0"
-          style={{ borderColor: t.metricGap }}>
-          <span className="text-xs font-mono" style={{ color: t.textFaint }}>
-            Enable channels per monitor in the Edit form
-          </span>
-          <button onClick={save} disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-mono font-bold rounded transition-colors">
-            {saving  ? <><Loader size={12} className="animate-spin" /> Saving…</> :
-             saved   ? <><CheckCircle size={12} /> Saved</> :
-                       'Save'}
-          </button>
+          {/* Bottom decoration */}
+          <div className="px-5 py-5">
+            <div className="text-xs font-mono" style={{ color: t.textFaint }}>
+              WatchTower v4
+            </div>
+          </div>
+        </aside>
+
+        {/* ── Right content ─────────────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0">
+
+          {/* Content header */}
+          <div className="flex items-center justify-between px-7 pt-6 pb-4 shrink-0">
+            <div>
+              <h2 className="text-base font-semibold font-mono"
+                style={{ color: t.textPrimary }}>
+                {TABS.find(tab => tab.id === activeTab)?.label}
+              </h2>
+              <p className="text-xs font-mono mt-0.5" style={{ color: t.textMuted }}>
+                {activeTab === 'general'
+                  ? 'Dashboard-wide display preferences'
+                  : 'Configure alert delivery channels'}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: t.textMuted }}
+              onMouseEnter={e => {
+                e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+                e.currentTarget.style.color = t.textPrimary;
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = t.textMuted;
+              }}>
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="mx-7 mb-5 h-px" style={{ backgroundColor: t.cardBorder }} />
+
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto px-7 pb-4">
+            {activeTab === 'general' && (
+              <GeneralTab
+                viewMode={viewMode}
+                onViewModeChange={onViewModeChange}
+                t={t}
+                isDark={isDark}
+              />
+            )}
+            {activeTab === 'notifications' && (
+              <NotificationsTab
+                settings={settings}
+                set={set}
+                showPass={showPass}
+                toggleShow={toggleShow}
+                testState={testState}
+                test={test}
+                inputCls={inputCls}
+                inputStyle={inputStyle}
+                t={t}
+                isDark={isDark}
+              />
+            )}
+          </div>
+
+          {/* Footer — save only on Notifications tab */}
+          {activeTab === 'notifications' && (
+            <div
+              className="flex items-center justify-between px-7 py-4 border-t shrink-0"
+              style={{ borderColor: t.cardBorder }}>
+              <span className="text-xs font-mono" style={{ color: t.textFaint }}>
+                Enable channels per monitor in the Edit form
+              </span>
+              <button
+                onClick={save}
+                disabled={saving}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-mono font-bold transition-all disabled:opacity-60"
+                style={{
+                  background: saved ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                  color: '#fff',
+                  boxShadow: saved ? '0 2px 12px rgba(34,197,94,0.35)' : '0 2px 12px rgba(59,130,246,0.35)',
+                }}>
+                {saving ? <><Loader size={12} className="animate-spin" /> Saving…</> :
+                 saved  ? <><CheckCircle size={12} /> Saved</> :
+                          'Save changes'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
+// ── General tab ───────────────────────────────────────────────────────────────
+
+function GeneralTab({ viewMode, onViewModeChange, t, isDark }) {
+  return (
+    <div className="space-y-3">
+      <SettingRow
+        title="Grouped view"
+        description="Collapse monitors sharing a tag into a single summary card. Click a group to expand individual monitors."
+        t={t}
+        isDark={isDark}>
+        <Toggle
+          enabled={viewMode === 'grouped'}
+          onToggle={v => onViewModeChange?.(v ? 'grouped' : 'flat')}
+          isDark={isDark}
+        />
+      </SettingRow>
+    </div>
+  );
+}
+
+// ── Notifications tab ─────────────────────────────────────────────────────────
+
+function NotificationsTab({ settings, set, showPass, toggleShow, testState, test, inputCls, inputStyle, t, isDark }) {
+  return (
+    <div className="space-y-4">
+      <Channel
+        title="Telegram"
+        description="Free push notifications via Telegram Bot API"
+        enabled={settings.telegram_enabled === '1'}
+        onToggle={v => set('telegram_enabled', v ? '1' : '')}
+        testState={testState.telegram}
+        onTest={() => test('telegram')}
+        t={t}
+        isDark={isDark}>
+        <Field label="Bot Token" t={t}>
+          <PasswordInput value={settings.telegram_token}
+            onChange={v => set('telegram_token', v)}
+            show={showPass.telegram_token}
+            onToggle={() => toggleShow('telegram_token')}
+            placeholder="123456:ABC-DEF..."
+            cls={inputCls} style={inputStyle} t={t} />
+        </Field>
+        <Field label="Chat ID" t={t}>
+          <input value={settings.telegram_chat_id}
+            onChange={e => set('telegram_chat_id', e.target.value)}
+            placeholder="-1001234567890"
+            className={inputCls} style={inputStyle} />
+        </Field>
+      </Channel>
+
+      <Channel
+        title="Email"
+        description="SMTP delivery — works with Gmail App Passwords, Brevo, Resend, or any relay"
+        enabled={settings.email_enabled === '1'}
+        onToggle={v => set('email_enabled', v ? '1' : '')}
+        testState={testState.email}
+        onTest={() => test('email')}
+        t={t}
+        isDark={isDark}>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="SMTP Host" t={t}>
+            <input value={settings.email_smtp_host}
+              onChange={e => set('email_smtp_host', e.target.value)}
+              placeholder="smtp.gmail.com"
+              className={inputCls} style={inputStyle} />
+          </Field>
+          <Field label="Port" t={t}>
+            <input value={settings.email_smtp_port}
+              onChange={e => set('email_smtp_port', e.target.value)}
+              placeholder="587"
+              className={inputCls} style={inputStyle} />
+          </Field>
+        </div>
+        <Field label="Username" t={t}>
+          <input value={settings.email_smtp_user}
+            onChange={e => set('email_smtp_user', e.target.value)}
+            placeholder="you@gmail.com"
+            className={inputCls} style={inputStyle} />
+        </Field>
+        <Field label="Password / App Password" t={t}>
+          <PasswordInput value={settings.email_smtp_pass}
+            onChange={v => set('email_smtp_pass', v)}
+            show={showPass.email_smtp_pass}
+            onToggle={() => toggleShow('email_smtp_pass')}
+            placeholder="••••••••••••••••"
+            cls={inputCls} style={inputStyle} t={t} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="From" t={t}>
+            <input value={settings.email_from}
+              onChange={e => set('email_from', e.target.value)}
+              placeholder="alerts@example.com"
+              className={inputCls} style={inputStyle} />
+          </Field>
+          <Field label="To" t={t}>
+            <input value={settings.email_to}
+              onChange={e => set('email_to', e.target.value)}
+              placeholder="you@example.com"
+              className={inputCls} style={inputStyle} />
+          </Field>
+        </div>
+      </Channel>
+
+      <Channel
+        title="SMS via Twilio"
+        description="Paid per message (~$0.008/msg) — requires a Twilio account and purchased phone number"
+        enabled={settings.twilio_enabled === '1'}
+        onToggle={v => set('twilio_enabled', v ? '1' : '')}
+        testState={testState.twilio}
+        onTest={() => test('twilio')}
+        t={t}
+        isDark={isDark}>
+        <Field label="Account SID" t={t}>
+          <input value={settings.twilio_account_sid}
+            onChange={e => set('twilio_account_sid', e.target.value)}
+            placeholder="ACxxxxxxxxxxxxxxxx"
+            className={inputCls} style={inputStyle} />
+        </Field>
+        <Field label="Auth Token" t={t}>
+          <PasswordInput value={settings.twilio_auth_token}
+            onChange={v => set('twilio_auth_token', v)}
+            show={showPass.twilio_auth_token}
+            onToggle={() => toggleShow('twilio_auth_token')}
+            placeholder="••••••••••••••••"
+            cls={inputCls} style={inputStyle} t={t} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="From Number" t={t}>
+            <input value={settings.twilio_from}
+              onChange={e => set('twilio_from', e.target.value)}
+              placeholder="+15551234567"
+              className={inputCls} style={inputStyle} />
+          </Field>
+          <Field label="To Number" t={t}>
+            <input value={settings.twilio_to}
+              onChange={e => set('twilio_to', e.target.value)}
+              placeholder="+15559876543"
+              className={inputCls} style={inputStyle} />
+          </Field>
+        </div>
+      </Channel>
+    </div>
+  );
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Channel({ title, description, enabled, onToggle, testState, onTest, children, t }) {
+function SettingRow({ title, description, children, t, isDark }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-6 px-4 py-4 rounded-xl border"
+      style={{
+        borderColor:     t.cardBorder,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+      }}>
+      <div>
+        <div className="text-sm font-mono font-semibold" style={{ color: t.textPrimary }}>
+          {title}
+        </div>
+        <div className="text-xs font-mono mt-1 leading-relaxed" style={{ color: t.textMuted }}>
+          {description}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Toggle({ enabled, onToggle, isDark }) {
+  return (
+    <button
+      onClick={() => onToggle(!enabled)}
+      className="shrink-0 relative transition-all"
+      style={{
+        width:           44,
+        height:          24,
+        borderRadius:    12,
+        backgroundColor: enabled ? '#3b82f6' : isDark ? '#374151' : '#d1d5db',
+        boxShadow:       enabled ? '0 0 0 3px rgba(59,130,246,0.2)' : 'none',
+        transition:      'background-color 0.2s, box-shadow 0.2s',
+      }}>
+      <span
+        style={{
+          position:       'absolute',
+          top:            3,
+          left:           enabled ? 23 : 3,
+          width:          18,
+          height:         18,
+          borderRadius:   9,
+          backgroundColor:'#fff',
+          boxShadow:      '0 1px 3px rgba(0,0,0,0.3)',
+          transition:     'left 0.2s',
+        }}
+      />
+    </button>
+  );
+}
+
+function Channel({ title, description, enabled, onToggle, testState, onTest, children, t, isDark }) {
   const isLoading = testState === 'loading';
   const isOk      = testState === 'ok';
   const isError   = testState && testState !== 'loading' && testState !== 'ok';
 
   return (
-    <div className="rounded-lg border overflow-hidden" style={{ borderColor: t.cardBorder }}>
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{
+        borderColor: enabled
+          ? isDark ? 'rgba(59,130,246,0.3)' : 'rgba(59,130,246,0.25)'
+          : t.cardBorder,
+        transition: 'border-color 0.2s',
+      }}>
+
       {/* Channel header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b"
-        style={{ backgroundColor: t.tagBg, borderColor: t.cardBorder }}>
+      <div
+        className="flex items-center justify-between px-5 py-3.5"
+        style={{
+          backgroundColor: enabled
+            ? isDark ? 'rgba(59,130,246,0.07)' : 'rgba(59,130,246,0.04)'
+            : isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+          borderBottom: `1px solid ${enabled
+            ? isDark ? 'rgba(59,130,246,0.2)' : 'rgba(59,130,246,0.15)'
+            : t.cardBorder}`,
+        }}>
         <div>
-          <div className="text-sm font-mono font-semibold" style={{ color: t.textPrimary }}>
-            {title}
+          <div className="flex items-center gap-2">
+            {enabled && (
+              <span
+                className="inline-flex h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: '#3b82f6' }}
+              />
+            )}
+            <span className="text-sm font-mono font-semibold" style={{ color: t.textPrimary }}>
+              {title}
+            </span>
           </div>
           <div className="text-xs font-mono mt-0.5" style={{ color: t.textMuted }}>
             {description}
           </div>
         </div>
-        {/* Toggle */}
-        <button onClick={() => onToggle(!enabled)}
-          className="shrink-0 ml-4 w-9 h-5 rounded-full transition-colors relative"
-          style={{ backgroundColor: enabled ? '#3b82f6' : t.metricGap }}>
-          <span className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all shadow-sm"
-            style={{ left: enabled ? '18px' : '2px' }} />
-        </button>
+        <Toggle enabled={enabled} onToggle={onToggle} isDark={isDark} />
       </div>
 
       {/* Fields */}
-      <div className="px-4 py-4 space-y-3">
+      <div className="px-5 py-4 space-y-3">
         {children}
 
         {/* Test button + result */}
-        <div className="flex items-center gap-3 pt-1">
-          <button onClick={onTest} disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded border transition-colors disabled:opacity-50"
-            style={{ backgroundColor: t.inputBg, borderColor: t.cardBorder, color: t.textSecondary }}>
+        <div className="flex items-center gap-3 pt-2 border-t" style={{ borderColor: t.cardBorder }}>
+          <button
+            onClick={onTest}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all disabled:opacity-50"
+            style={{
+              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+              border:          `1px solid ${t.cardBorder}`,
+              color:           t.textSecondary,
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = t.cardBorderHover}
+            onMouseLeave={e => e.currentTarget.style.borderColor = t.cardBorder}>
             {isLoading
               ? <><Loader size={11} className="animate-spin" /> Sending…</>
-              : <><Send size={11} /> Send Test</>}
+              : <><Send size={11} /> Send test</>}
           </button>
           {isOk && (
-            <span className="flex items-center gap-1 text-xs font-mono text-green-400">
-              <CheckCircle size={11} /> Sent successfully
+            <span className="flex items-center gap-1.5 text-xs font-mono" style={{ color: '#4ade80' }}>
+              <CheckCircle size={12} /> Delivered
             </span>
           )}
           {isError && (
-            <span className="flex items-center gap-1 text-xs font-mono text-red-400">
-              <AlertCircle size={11} /> {testState}
+            <span className="flex items-center gap-1.5 text-xs font-mono text-red-400 max-w-xs truncate">
+              <AlertCircle size={12} className="shrink-0" /> {testState}
             </span>
           )}
         </div>
@@ -287,7 +521,7 @@ function Channel({ title, description, enabled, onToggle, testState, onTest, chi
 function Field({ label, children, t }) {
   return (
     <div>
-      <label className="block text-xs font-mono uppercase tracking-wider mb-1"
+      <label className="block text-xs font-mono font-medium uppercase tracking-wider mb-1.5"
         style={{ color: t.textMuted }}>
         {label}
       </label>
@@ -305,12 +539,14 @@ function PasswordInput({ value, onChange, show, onToggle, placeholder, cls, styl
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         className={cls}
-        style={{ ...style, paddingRight: '2.5rem' }}
+        style={{ ...style, paddingRight: '2.75rem' }}
       />
-      <button type="button" onClick={onToggle}
-        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100"
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute right-3 top-1/2 -translate-y-1/2 transition-opacity opacity-40 hover:opacity-80"
         style={{ color: t.textSecondary }}>
-        {show ? <EyeOff size={13} /> : <Eye size={13} />}
+        {show ? <EyeOff size={14} /> : <Eye size={14} />}
       </button>
     </div>
   );

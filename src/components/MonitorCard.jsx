@@ -1,7 +1,7 @@
 import React, { useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
-import { Edit2, Trash2, Tag, ShieldCheck, ShieldAlert, Code } from 'lucide-react';
+import { Edit2, Trash2, Tag, ShieldCheck, ShieldAlert, Code, ArrowLeftRight, Minimize2 } from 'lucide-react';
 import { formatInterval, formatTimestamp, certDaysColor } from '../types/monitor';
 import { useTheme } from '../hooks/useTheme';
 
@@ -215,7 +215,13 @@ function CheckTypeBadge({ checkType }) {
 // MonitorCard
 // ---------------------------------------------------------------------------
 
-export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = false }) {
+export function MonitorCard({
+  monitor, onEdit, onDelete, onEmbed, compact = false,
+  // Drag-and-drop props (optional — only passed when dragging is enabled)
+  dragHandleProps, isDragging = false,
+  // Width control (optional — 1 = single col, 2 = double col)
+  width = 1, onSetWidth,
+}) {
   const { t } = useTheme();
   const chartRef = useRef(null);
 
@@ -309,13 +315,21 @@ export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = fals
   // ── Full layout ───────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col rounded-lg border transition-colors"
-      style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}
-      onMouseEnter={e => e.currentTarget.style.borderColor = t.cardBorderHover}
-      onMouseLeave={e => e.currentTarget.style.borderColor = t.cardBorder}>
+      style={{
+        backgroundColor: t.cardBg,
+        borderColor: isDragging ? t.cardBorderHover : t.cardBorder,
+        opacity: isDragging ? 0.85 : 1,
+      }}
+      onMouseEnter={e => { if (!isDragging) e.currentTarget.style.borderColor = t.cardBorderHover; }}
+      onMouseLeave={e => { if (!isDragging) e.currentTarget.style.borderColor = t.cardBorder; }}>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between px-4 pt-4 pb-2 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+      {/* ── Header — entire area is the drag handle when dragging is enabled ── */}
+      <div
+        className="flex items-start justify-between px-4 pt-4 pb-2 gap-2 rounded-t-lg"
+        style={{ cursor: dragHandleProps ? 'grab' : 'default' }}
+        {...(dragHandleProps || {})}>
+
+        <div className="flex items-center gap-2 min-w-0 flex-1" style={{ pointerEvents: 'none' }}>
           <StatusBadge status={monitor.status} />
           <CheckTypeBadge checkType={monitor.checkType} />
           <span className="text-sm font-semibold truncate" title={monitor.label}
@@ -323,7 +337,44 @@ export function MonitorCard({ monitor, onEdit, onDelete, onEmbed, compact = fals
             {monitor.label}
           </span>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+
+        {/* Action buttons — need pointer-events restored so clicks still work */}
+        <div className="flex items-center gap-1 shrink-0" style={{ pointerEvents: 'all' }}
+          onPointerDown={e => e.stopPropagation()}>
+
+          {/* Width toggle — visible labeled chip */}
+          {onSetWidth && (
+            <button
+              onClick={() => onSetWidth(width === 1 ? 2 : 1)}
+              title={width === 2 ? 'Collapse to 1 column' : 'Expand to 2 columns'}
+              className="flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono transition-all"
+              style={width === 2 ? {
+                color:           '#60a5fa',
+                borderColor:     'rgba(96,165,250,0.4)',
+                backgroundColor: 'rgba(96,165,250,0.1)',
+              } : {
+                color:           t.textMuted,
+                borderColor:     t.cardBorder,
+                backgroundColor: 'transparent',
+              }}
+              onMouseEnter={e => {
+                if (width !== 2) {
+                  e.currentTarget.style.borderColor = t.cardBorderHover;
+                  e.currentTarget.style.color = t.textSecondary;
+                }
+              }}
+              onMouseLeave={e => {
+                if (width !== 2) {
+                  e.currentTarget.style.borderColor = t.cardBorder;
+                  e.currentTarget.style.color = t.textMuted;
+                }
+              }}>
+              {width === 2
+                ? <><Minimize2 size={10} /> Narrow</>
+                : <><ArrowLeftRight size={10} /> Wide</>}
+            </button>
+          )}
+
           {onEmbed && (
             <button onClick={() => onEmbed(monitor)} title="Embed"
               className="p-1.5 rounded transition-colors"

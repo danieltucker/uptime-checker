@@ -1,15 +1,57 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code } from 'lucide-react';
+import {
+  DndContext, closestCenter,
+  KeyboardSensor, PointerSensor,
+  useSensor, useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext, sortableKeyboardCoordinates,
+  rectSortingStrategy, useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { useMonitors }    from './hooks/useMonitors';
 import { useAlerts }      from './hooks/useAlerts';
 import { useTheme }       from './hooks/useTheme';
+import { useCardLayout }  from './hooks/useCardLayout';
 import { SummaryBar }     from './components/SummaryBar';
 import { MonitorCard }    from './components/MonitorCard';
 import { MonitorForm }    from './components/MonitorForm';
 import { AlertsPanel }    from './components/AlertsPanel';
 import { SettingsPanel }  from './components/SettingsPanel';
 import { EmbedModal }     from './components/EmbedModal';
+
+// ── Sortable card wrapper ─────────────────────────────────────────────────────
+
+function SortableMonitorCard({ monitor, onEdit, onDelete, onEmbed, width, onSetWidth, sortEnabled }) {
+  const id = String(monitor.id);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled: !sortEnabled,
+  });
+
+  const style = {
+    transform:   CSS.Transform.toString(transform),
+    transition,
+    gridColumn:  width === 2 ? 'span 2' : 'span 1',
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <MonitorCard
+        monitor={monitor}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onEmbed={onEmbed}
+        width={width}
+        onSetWidth={onSetWidth}
+        dragHandleProps={sortEnabled ? { ...attributes, ...listeners } : undefined}
+        isDragging={isDragging}
+      />
+    </div>
+  );
+}
 
 // ── Reference monitors seeded on first load ───────────────────────────────────
 const REFERENCE_SEEDS = [
@@ -54,6 +96,18 @@ export default function App() {
   const [sortBy,         setSortBy]         = useState('default');
   const [showSettings,   setShowSettings]   = useState(false);
   const [embedMonitor,   setEmbedMonitor]   = useState(null);   // null = closed, undefined = full-page
+  const [viewMode,       setViewMode]       = useState(() => {
+    try { return localStorage.getItem('wt-view-mode') || 'flat'; }
+    catch { return 'flat'; }
+  });
+
+  const { moveCard, sortMonitors, getWidth, setWidth } = useCardLayout();
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    try { localStorage.setItem('wt-view-mode', mode); }
+    catch {}
+  };
 
   const seededRef = useRef(false);
 
@@ -82,23 +136,40 @@ export default function App() {
   // All unique tags from user monitors (never includes _ref)
   const allTags = [...new Set(userMonitors.flatMap(m => m.tags ?? []))].sort();
 
-  const filteredMonitors = (tagFilter.length === 0
+  const baseFiltered = tagFilter.length === 0
     ? userMonitors
-    : userMonitors.filter(m => tagFilter.some(tag => m.tags?.includes(tag)))
-  ).slice().sort((a, b) => {
+    : userMonitors.filter(m => tagFilter.some(tag => m.tags?.includes(tag)));
+
+  const filteredMonitors = (() => {
     if (sortBy === 'uptime') {
-      // Worst uptime first so problems surface at the top
-      return (a.uptimePercent ?? 100) - (b.uptimePercent ?? 100);
+      return baseFiltered.slice().sort((a, b) =>
+        (a.uptimePercent ?? 100) - (b.uptimePercent ?? 100)
+      );
     }
     if (sortBy === 'ping') {
-      // Slowest first; null pings go to the bottom
-      if (a.currentPing == null && b.currentPing == null) return 0;
-      if (a.currentPing == null) return 1;
-      if (b.currentPing == null) return -1;
-      return b.currentPing - a.currentPing;
+      return baseFiltered.slice().sort((a, b) => {
+        if (a.currentPing == null && b.currentPing == null) return 0;
+        if (a.currentPing == null) return 1;
+        if (b.currentPing == null) return -1;
+        return b.currentPing - a.currentPing;
+      });
     }
-    return 0; // default: server creation order
-  });
+    // 'default': apply saved manual order
+    return sortMonitors(baseFiltered);
+  })();
+
+  // Drag-and-drop — only active in default sort mode
+  const sortEnabled = sortBy === 'default';
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = ({ active, over }) => {
+    if (over && active.id !== over.id) {
+      moveCard(active.id, over.id, filteredMonitors.map(m => m.id));
+    }
+  };
 
   // Active = unresolved and not dismissed
   const ongoingCount = alerts.filter(a => !a.resolvedAt && !a.dismissedAt).length;
@@ -149,7 +220,7 @@ export default function App() {
             </span>
             <span className="hidden sm:inline text-xs font-mono px-2 py-0.5 rounded border"
               style={{ color: t.textFaint, borderColor: t.cardBorder }}>
-              uptime monitor · v3
+              uptime monitor · v4
             </span>
           </div>
 
@@ -297,17 +368,29 @@ export default function App() {
                 No monitors match the selected tags
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredMonitors.map(m => (
-                  <MonitorCard
-                    key={m.id}
-                    monitor={m}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onEmbed={m => setEmbedMonitor(m)}
-                  />
-                ))}
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}>
+                <SortableContext
+                  items={filteredMonitors.map(m => String(m.id))}
+                  strategy={rectSortingStrategy}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {filteredMonitors.map(m => (
+                      <SortableMonitorCard
+                        key={m.id}
+                        monitor={m}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                        onEmbed={m => setEmbedMonitor(m)}
+                        width={getWidth(m.id)}
+                        onSetWidth={(w) => setWidth(m.id, w)}
+                        sortEnabled={sortEnabled}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             )}
 
             {/* ── Network Reference section ──────────────────────────────── */}
@@ -349,7 +432,13 @@ export default function App() {
         />
       )}
 
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+        />
+      )}
 
       {embedMonitor !== null && (
         <EmbedModal
