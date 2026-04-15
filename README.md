@@ -332,46 +332,50 @@ uptime-checker/
 - **General tab** — dashboard-wide preferences including the grouped vs flat view toggle
 - **Notifications tab** — Telegram, Email, and SMS channel configuration
 
----
-
-## Roadmap
-
-### v4.1.0 - Monitor improvements
-
-#### HTTP response body validation
-
-- Optional "Body Contains" field on HTTP monitors — plain string, case-insensitive
-- If set, the response body must contain the string or the check is treated as DOWN regardless of HTTP status code
-- Useful for `/health` endpoints that return `200 OK` with a degraded JSON payload
-- Response bodies over 256 KB are aborted and treated as a failed body check; the 256 KB cap also protects the server from memory exhaustion on large API responses
-- Body content is never stored — only the pass/fail result is recorded
+### v4.1.0
 
 #### Alert channel filtering
 
 - The notification channel picker in the monitor form only shows channels that are toggled **enabled** in Settings
 - Selecting an enabled channel that has incomplete credentials shows a warning indicator and blocks save with a clear error message — preventing silent alert failures
 
-### v4.2.0 - API check type
+#### HTTP response body validation
 
-A dedicated check type for REST and JSON API endpoints, keeping HTTP checks lightweight (reachability only) and giving API health checks a purpose-built config surface.
+- Optional "Body Contains" field on HTTP monitors — plain string, case-insensitive
+- If set, the response body must contain the string or the check is treated as DOWN regardless of HTTP status code
+- Response bodies over 256 KB are aborted and treated as a failed body check; the cap also protects the server from memory exhaustion on large API responses
+- Body content is never stored — only the pass/fail result is recorded
+
+### v4.1.1
+
+#### Bug fixes
+
+- Fixed an issue where all HTTP/HTTPS monitors reported DOWN after v4.1.0. The 256 KB response size cap was applied to every HTTP request, causing large responses to fail with an overflow error even when body validation was not configured.
+- Modal windows (Add/Edit monitor, Settings, Embed) now scroll correctly when the browser viewport is shorter than the modal height.
+
+### v4.2.0
 
 #### New check type: API
 
-- **GET requests** — same underlying HTTP machinery as the HTTP check type; all timing metrics (DNS, TCP, TLS, TTFB) are recorded identically
-- **Expected status code** — exact match (default: 200); the check is treated as DOWN if the response code differs
-- **Body validation** — optional, choose one:
-  - *Plain string* — case-insensitive substring search on the raw response body
-  - *JSON dot-path* — dot-notation field path (e.g. `data.status`) plus an expected value string; the check is DOWN if the field is missing or the value doesn't match
-- **Authentication** — optional, choose one per monitor:
-  - *Basic auth* — username and password sent as an `Authorization: Basic …` header
-  - *Bearer token* — arbitrary token sent as `Authorization: Bearer …`
-- **Custom headers** — up to five arbitrary key-value header pairs (useful for `X-API-Key` and similar schemes)
+A dedicated check type for REST and JSON API endpoints. HTTP checks are now reachability-only; body and response validation belong here.
 
-> **Security note:** authentication credentials (basic auth password, bearer token, custom header values) are stored as plaintext in the SQLite database alongside all other monitor configuration. For a self-hosted, single-user deployment this is an acceptable tradeoff, but shared or internet-exposed installs should be aware. Credential encryption is planned for a future release.
+- **Expected status code** — exact match (default: 200); the check is treated as DOWN if the response code differs
+- **Body Contains** — optional plain-string, case-insensitive substring match on the response body
+- **JSON assertion** — dot-notation field path (e.g. `data.status`) plus an expected value; DOWN if the field is missing or the value doesn't match
+- **Authentication** — Basic Auth (username + password) or Bearer Token per monitor
+- **Custom headers** — up to five arbitrary key-value header pairs (useful for `X-API-Key` and similar schemes)
+- Full timing breakdown (DNS, TCP, TLS, TTFB) identical to HTTP checks
+- Assertion failure reason shown directly on the card when a monitor is DOWN
+
+> **Security note:** authentication credentials are stored as plaintext in SQLite alongside other monitor config. Credential encryption is planned for a future release.
 
 #### Migration
 
-Existing HTTP monitors that have a "Body Contains" value configured are automatically migrated to the API check type on first run. All other settings (target, interval, tags, alert channels) are preserved.
+Existing HTTP monitors with a "Body Contains" value are automatically migrated to the API check type on first run. All other settings are preserved.
+
+---
+
+## Roadmap
 
 ### v4.x - Module System
 
