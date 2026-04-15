@@ -17,7 +17,7 @@ Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing
 ## Features
 
 ### Monitoring
-- **Three check types** - HTTP(S) with full timing breakdown, TCP port reachability, ICMP ping
+- **Four check types** - HTTP(S) with full timing breakdown, API with response/body validation, TCP port reachability, ICMP ping
 - **Live dashboard** - cards update in real time via Server-Sent Events
 - **Time-based history** - view 1h (raw), 12h, 1d, or 1w of history; sparklines and uptime % always match the selected window
 - **Detailed HTTP timing** - DNS, TCP, TLS, and TTFB measured and displayed separately
@@ -94,6 +94,18 @@ Sends a real HTTP or HTTPS request and measures the full request lifecycle.
 **Best for:** public websites, REST APIs, reverse-proxied services, anything with a TLS certificate, third-party SaaS your app depends on.
 
 **You get:** DNS ms, TCP ms, TLS ms, TTFB ms, HTTP status code, SSL expiry countdown.
+
+### API
+
+Sends an HTTP GET request and validates the response against configurable rules — status code, response body, or a specific JSON field value. Uses the same timing infrastructure as HTTP checks.
+
+**Best for:** `/health` endpoints, JSON APIs where you care about the response payload not just reachability, services that return `200 OK` even when degraded.
+
+**You get:** DNS ms, TCP ms, TLS ms, TTFB ms, HTTP status code, SSL expiry countdown, pass/fail for any configured body or JSON assertion.
+
+**Auth options:** basic auth (username + password), bearer token, or custom headers (up to 5 key-value pairs).
+
+> **Security note:** auth credentials are stored as plaintext in SQLite. Credential encryption is planned for a future release.
 
 ### TCP
 
@@ -222,11 +234,20 @@ Embedded views receive live SSE updates and have no edit, delete, or settings co
 | `target`      | string                    | IP address, hostname, or URL                                       |
 | `label`       | string                    | Display name (defaults to target)                                  |
 | `description` | string                    | Optional notes shown on the card                                   |
-| `checkType`   | `http` / `tcp` / `icmp`  | Check strategy                                                     |
+| `checkType`   | `http` / `api` / `tcp` / `icmp` | Check strategy                                               |
 | `interval`    | number (seconds)          | How often to run checks (default: 60)                              |
 | `port`        | number                    | Required for TCP checks                                            |
 | `alertTypes`  | string[]                  | `Email`, `SMS`, `Telegram`, `Webhook`, or `None`                   |
 | `tags`        | string[]                  | Freeform labels; `_ref` is reserved for built-in reference monitors |
+| `expectedStatus` | number                 | API checks only — expected HTTP status code (default: 200)         |
+| `bodyMatch`   | string                    | API/HTTP checks — plain string the response body must contain      |
+| `jsonPath`    | string                    | API checks only — dot-notation path to a JSON field (e.g. `data.status`) |
+| `jsonExpected`| string                    | API checks only — expected string value at `jsonPath`              |
+| `authType`    | `none` / `basic` / `bearer` | API checks only — authentication method                          |
+| `authUser`    | string                    | API checks — basic auth username                                   |
+| `authPass`    | string                    | API checks — basic auth password (stored plaintext)               |
+| `authToken`   | string                    | API checks — bearer token (stored plaintext)                      |
+| `headers`     | `{key,value}[]`           | API checks — up to 5 custom request headers                       |
 
 ---
 
@@ -329,6 +350,28 @@ uptime-checker/
 
 - The notification channel picker in the monitor form only shows channels that are toggled **enabled** in Settings
 - Selecting an enabled channel that has incomplete credentials shows a warning indicator and blocks save with a clear error message — preventing silent alert failures
+
+### v4.2.0 - API check type
+
+A dedicated check type for REST and JSON API endpoints, keeping HTTP checks lightweight (reachability only) and giving API health checks a purpose-built config surface.
+
+#### New check type: API
+
+- **GET requests** — same underlying HTTP machinery as the HTTP check type; all timing metrics (DNS, TCP, TLS, TTFB) are recorded identically
+- **Expected status code** — exact match (default: 200); the check is treated as DOWN if the response code differs
+- **Body validation** — optional, choose one:
+  - *Plain string* — case-insensitive substring search on the raw response body
+  - *JSON dot-path* — dot-notation field path (e.g. `data.status`) plus an expected value string; the check is DOWN if the field is missing or the value doesn't match
+- **Authentication** — optional, choose one per monitor:
+  - *Basic auth* — username and password sent as an `Authorization: Basic …` header
+  - *Bearer token* — arbitrary token sent as `Authorization: Bearer …`
+- **Custom headers** — up to five arbitrary key-value header pairs (useful for `X-API-Key` and similar schemes)
+
+> **Security note:** authentication credentials (basic auth password, bearer token, custom header values) are stored as plaintext in the SQLite database alongside all other monitor configuration. For a self-hosted, single-user deployment this is an acceptable tradeoff, but shared or internet-exposed installs should be aware. Credential encryption is planned for a future release.
+
+#### Migration
+
+Existing HTTP monitors that have a "Body Contains" value configured are automatically migrated to the API check type on first run. All other settings (target, interval, tags, alert channels) are preserved.
 
 ### v4.x - Module System
 

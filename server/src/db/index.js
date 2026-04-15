@@ -25,6 +25,14 @@ db.exec(`
     check_type         TEXT    NOT NULL DEFAULT 'http',
     port               INTEGER,
     body_match         TEXT,
+    expected_status    INTEGER,
+    json_path          TEXT,
+    json_expected      TEXT,
+    auth_type          TEXT,
+    auth_user          TEXT,
+    auth_pass          TEXT,
+    auth_token         TEXT,
+    request_headers    TEXT,
     created_at         TEXT    NOT NULL
   );
 
@@ -71,12 +79,33 @@ for (const sql of [
   `ALTER TABLE monitors ADD COLUMN degraded_threshold INTEGER`,
   `ALTER TABLE monitors ADD COLUMN alert_config TEXT NOT NULL DEFAULT '{}'`,
   `ALTER TABLE monitors ADD COLUMN body_match TEXT`,
+  `ALTER TABLE monitors ADD COLUMN expected_status INTEGER`,
+  `ALTER TABLE monitors ADD COLUMN json_path TEXT`,
+  `ALTER TABLE monitors ADD COLUMN json_expected TEXT`,
+  `ALTER TABLE monitors ADD COLUMN auth_type TEXT`,
+  `ALTER TABLE monitors ADD COLUMN auth_user TEXT`,
+  `ALTER TABLE monitors ADD COLUMN auth_pass TEXT`,
+  `ALTER TABLE monitors ADD COLUMN auth_token TEXT`,
+  `ALTER TABLE monitors ADD COLUMN request_headers TEXT`,
 ]) {
   try { db.exec(sql); } catch { /* column already exists */ }
 }
 
+// ── v4.2 data migration: HTTP monitors with body_match → API check type ───────
+try {
+  db.prepare(`
+    UPDATE monitors
+    SET check_type = 'api'
+    WHERE check_type = 'http'
+      AND body_match IS NOT NULL
+      AND body_match != ''
+  `).run();
+} catch { /* ignore */ }
+
 // ── Row → JS object ───────────────────────────────────────────────────────────
 export function rowToMonitor(row) {
+  let requestHeaders = [];
+  try { requestHeaders = JSON.parse(row.request_headers || '[]'); } catch {}
   return {
     id:               row.id,
     label:            row.label,
@@ -86,10 +115,18 @@ export function rowToMonitor(row) {
     alertTypes:       JSON.parse(row.alert_types),
     tags:             JSON.parse(row.tags),
     checkType:        row.check_type,
-    port:             row.port              ?? null,
+    port:             row.port               ?? null,
     degradedThreshold: row.degraded_threshold ?? null,
-    alertConfig:      row.alert_config       ?? '{}',
-    bodyMatch:        row.body_match         ?? null,
+    alertConfig:      row.alert_config        ?? '{}',
+    bodyMatch:        row.body_match          ?? null,
+    expectedStatus:   row.expected_status     ?? null,
+    jsonPath:         row.json_path           ?? null,
+    jsonExpected:     row.json_expected       ?? null,
+    authType:         row.auth_type           ?? 'none',
+    authUser:         row.auth_user           ?? null,
+    authPass:         row.auth_pass           ?? null,
+    authToken:        row.auth_token          ?? null,
+    requestHeaders,
     createdAt:        row.created_at,
   };
 }

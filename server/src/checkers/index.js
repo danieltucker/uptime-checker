@@ -9,6 +9,7 @@
  */
 
 import { httpCheck } from './http.js';
+import { apiCheck }  from './api.js';
 import { tcpCheck }  from './tcp.js';
 import { icmpCheck } from './icmp.js';
 
@@ -18,8 +19,10 @@ export function runCheck(monitor) {
       return tcpCheck(monitor.target, monitor.port ?? 80);
     case 'icmp':
       return icmpCheck(monitor.target);
+    case 'api':
+      return apiCheck(monitor);
     case 'http':
     default:
-      return httpCheck(monitor.target, monitor.bodyMatch ?? null);
+      return httpCheck(monitor.target);
   }
 }

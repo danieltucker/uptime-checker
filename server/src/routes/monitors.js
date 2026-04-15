@@ -98,7 +98,7 @@ function buildMonitorPayload(id, window = '1h') {
   // the timing breakdown row shown beneath the card header
   const latestRaw = db.prepare(`
     SELECT checked_at, status, total_ms, dns_ms, tcp_ms, tls_ms,
-           ttfb_ms, http_status, cert_days
+           ttfb_ms, http_status, cert_days, error
     FROM   check_history
     WHERE  monitor_id = ?
     ORDER  BY checked_at DESC
@@ -120,6 +120,7 @@ function buildMonitorPayload(id, window = '1h') {
       totalMs:    latestRaw.total_ms,
       httpStatus: latestRaw.http_status,
       certDays:   latestRaw.cert_days,
+      error:      latestRaw.error ?? null,
     } : null,
     history,
   };
@@ -149,6 +150,8 @@ router.post('/', (req, res) => {
     label, target, description = '', interval = 60,
     alertTypes = ['None'], tags = [], checkType = 'http', port,
     degradedThreshold, alertConfig = {}, bodyMatch,
+    expectedStatus, jsonPath, jsonExpected,
+    authType, authUser, authPass, authToken, requestHeaders = [],
   } = req.body;
 
   if (!target?.trim()) return res.status(400).json({ error: '`target` is required' });
@@ -158,10 +161,16 @@ router.post('/', (req, res) => {
   db.prepare(`
     INSERT INTO monitors
       (id, label, target, description, interval, alert_types, tags, check_type, port,
-       degraded_threshold, alert_config, body_match, created_at)
+       degraded_threshold, alert_config, body_match,
+       expected_status, json_path, json_expected,
+       auth_type, auth_user, auth_pass, auth_token, request_headers,
+       created_at)
     VALUES
       (@id, @label, @target, @description, @interval, @alertTypes, @tags, @checkType, @port,
-       @degradedThreshold, @alertConfig, @bodyMatch, @createdAt)
+       @degradedThreshold, @alertConfig, @bodyMatch,
+       @expectedStatus, @jsonPath, @jsonExpected,
+       @authType, @authUser, @authPass, @authToken, @requestHeaders,
+       @createdAt)
   `).run({
     id,
     label:             (label || target).trim(),
@@ -175,6 +184,14 @@ router.post('/', (req, res) => {
     degradedThreshold: degradedThreshold ?? null,
     alertConfig:       JSON.stringify(alertConfig),
     bodyMatch:         bodyMatch?.trim() || null,
+    expectedStatus:    expectedStatus ?? null,
+    jsonPath:          jsonPath?.trim() || null,
+    jsonExpected:      jsonExpected?.trim() || null,
+    authType:          authType || null,
+    authUser:          authUser?.trim() || null,
+    authPass:          authPass?.trim() || null,
+    authToken:         authToken?.trim() || null,
+    requestHeaders:    JSON.stringify(requestHeaders),
     createdAt:         new Date().toISOString(),
   });
 
@@ -194,6 +211,8 @@ router.put('/:id', (req, res) => {
     label, target, description, interval,
     alertTypes, tags, checkType, port,
     degradedThreshold, alertConfig, bodyMatch,
+    expectedStatus, jsonPath, jsonExpected,
+    authType, authUser, authPass, authToken, requestHeaders,
   } = req.body;
 
   const next = {
@@ -207,7 +226,15 @@ router.put('/:id', (req, res) => {
     port:              port              ?? existing.port,
     degradedThreshold: degradedThreshold !== undefined ? (degradedThreshold ?? null) : existing.degraded_threshold,
     alertConfig:       JSON.stringify(alertConfig   ?? JSON.parse(existing.alert_config ?? '{}')),
-    bodyMatch:         bodyMatch !== undefined ? (bodyMatch?.trim() || null) : existing.body_match,
+    bodyMatch:         bodyMatch         !== undefined ? (bodyMatch?.trim()     || null) : existing.body_match,
+    expectedStatus:    expectedStatus    !== undefined ? (expectedStatus        ?? null) : existing.expected_status,
+    jsonPath:          jsonPath          !== undefined ? (jsonPath?.trim()      || null) : existing.json_path,
+    jsonExpected:      jsonExpected      !== undefined ? (jsonExpected?.trim()  || null) : existing.json_expected,
+    authType:          authType          !== undefined ? (authType              || null) : existing.auth_type,
+    authUser:          authUser          !== undefined ? (authUser?.trim()      || null) : existing.auth_user,
+    authPass:          authPass          !== undefined ? (authPass?.trim()      || null) : existing.auth_pass,
+    authToken:         authToken         !== undefined ? (authToken?.trim()     || null) : existing.auth_token,
+    requestHeaders:    requestHeaders    !== undefined ? JSON.stringify(requestHeaders) : (existing.request_headers ?? '[]'),
   };
 
   db.prepare(`
@@ -216,7 +243,11 @@ router.put('/:id', (req, res) => {
       interval = @interval, alert_types = @alertTypes, tags = @tags,
       check_type = @checkType, port = @port,
       degraded_threshold = @degradedThreshold, alert_config = @alertConfig,
-      body_match = @bodyMatch
+      body_match = @bodyMatch,
+      expected_status = @expectedStatus, json_path = @jsonPath,
+      json_expected = @jsonExpected, auth_type = @authType,
+      auth_user = @authUser, auth_pass = @authPass, auth_token = @authToken,
+      request_headers = @requestHeaders
     WHERE id = @id
   `).run({ ...next, id });
 

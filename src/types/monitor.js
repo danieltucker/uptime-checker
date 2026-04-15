@@ -37,6 +37,7 @@ export const INTERVAL_OPTIONS = [
 export const ALERT_TYPES  = ['Email', 'SMS', 'Telegram', 'Webhook', 'None'];
 export const CHECK_TYPES  = [
   { label: 'HTTP / HTTPS', value: 'http' },
+  { label: 'API',          value: 'api'  },
   { label: 'TCP Port',     value: 'tcp'  },
   { label: 'ICMP Ping',    value: 'icmp' },
 ];

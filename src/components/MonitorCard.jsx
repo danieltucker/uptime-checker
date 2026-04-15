@@ -199,7 +199,7 @@ function CertBadge({ certDays }) {
 // Check-type badge
 // ---------------------------------------------------------------------------
 
-const CHECK_TYPE_LABELS = { http: 'HTTP', tcp: 'TCP', icmp: 'ICMP' };
+const CHECK_TYPE_LABELS = { http: 'HTTP', api: 'API', tcp: 'TCP', icmp: 'ICMP' };
 
 function CheckTypeBadge({ checkType }) {
   const { t } = useTheme();
@@ -436,8 +436,18 @@ export function MonitorCard({
           valueStyle={{ color: t.textSecondary }} t={t} />
       </div>
 
-      {/* ── Timing breakdown (HTTP only) ─────────────────────────────────────── */}
+      {/* ── Timing breakdown (HTTP / API) ───────────────────────────────────── */}
       <TimingRow latest={monitor.latest} />
+
+      {/* ── Assertion error hint (API checks) ───────────────────────────────── */}
+      {monitor.status === 'down' && monitor.latest?.error && (
+        <div className="px-3 pb-2">
+          <span className="text-xs font-mono truncate block" style={{ color: '#f87171' }}
+            title={monitor.latest.error}>
+            {monitor.latest.error}
+          </span>
+        </div>
+      )}
 
       {/* ── Sparkline ────────────────────────────────────────────────────────── */}
       <div className="px-2 py-2">

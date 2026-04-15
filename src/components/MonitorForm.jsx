@@ -40,7 +40,16 @@ const DEFAULT_FORM = {
   interval:         60,
   alertTypes:       ['None'],
   degradedThreshold: '',
+  // API-check fields
+  expectedStatus:   '',
   bodyMatch:        '',
+  jsonPath:         '',
+  jsonExpected:     '',
+  authType:         'none',
+  authUser:         '',
+  authPass:         '',
+  authToken:        '',
+  requestHeaders:   [{ key: '', value: '' }],
   alertConfig:      DEFAULT_ALERT_CONFIG,
   tags:             [],
   tagInput:         '',
@@ -73,6 +82,7 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
         degraded:  { ...DEFAULT_ALERT_CONFIG.degraded,  ...(rawCfg.degraded  || {}) },
         recovered: { ...DEFAULT_ALERT_CONFIG.recovered, ...(rawCfg.recovered || {}) },
       };
+      const rh = editingMonitor.requestHeaders ?? [];
       setForm({
         target:            editingMonitor.target,
         label:             editingMonitor.label,
@@ -82,7 +92,15 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
         interval:          editingMonitor.interval,
         alertTypes:        editingMonitor.alertTypes,
         degradedThreshold: editingMonitor.degradedThreshold ?? '',
+        expectedStatus:    editingMonitor.expectedStatus ?? '',
         bodyMatch:         editingMonitor.bodyMatch ?? '',
+        jsonPath:          editingMonitor.jsonPath ?? '',
+        jsonExpected:      editingMonitor.jsonExpected ?? '',
+        authType:          editingMonitor.authType ?? 'none',
+        authUser:          editingMonitor.authUser ?? '',
+        authPass:          editingMonitor.authPass ?? '',
+        authToken:         editingMonitor.authToken ?? '',
+        requestHeaders:    rh.length > 0 ? rh : [{ key: '', value: '' }],
         alertConfig,
         tags:              editingMonitor.tags.filter(t => t !== '_ref'),
         tagInput:          '',
@@ -201,6 +219,14 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
     const finalTags = form.tagInput.trim()
       ? [...new Set([...form.tags, form.tagInput.trim()])]
       : form.tags;
+
+    const isApi = form.checkType === 'api';
+
+    // Only send non-empty header rows
+    const cleanHeaders = isApi
+      ? form.requestHeaders.filter(h => h.key?.trim())
+      : [];
+
     onSubmit({
       target:            form.target.trim(),
       label:             form.label.trim(),
@@ -210,7 +236,15 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
       interval:          form.interval,
       alertTypes:        form.alertTypes,
       degradedThreshold: form.degradedThreshold !== '' ? Number(form.degradedThreshold) : null,
-      bodyMatch:         form.checkType === 'http' && form.bodyMatch.trim() ? form.bodyMatch.trim() : null,
+      bodyMatch:         isApi && form.bodyMatch.trim() ? form.bodyMatch.trim() : null,
+      expectedStatus:    isApi && form.expectedStatus !== '' ? Number(form.expectedStatus) : null,
+      jsonPath:          isApi && form.jsonPath.trim()    ? form.jsonPath.trim()    : null,
+      jsonExpected:      isApi && form.jsonExpected.trim() ? form.jsonExpected.trim() : null,
+      authType:          isApi ? (form.authType || 'none') : null,
+      authUser:          isApi && form.authType === 'basic'  ? form.authUser.trim()  : null,
+      authPass:          isApi && form.authType === 'basic'  ? form.authPass.trim()  : null,
+      authToken:         isApi && form.authType === 'bearer' ? form.authToken.trim() : null,
+      requestHeaders:    cleanHeaders,
       alertConfig:       form.alertConfig,
       tags:              finalTags,
     });
@@ -219,9 +253,20 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
   const isEditing = !!editingMonitor;
 
   const targetPlaceholder =
-    form.checkType === 'http'  ? 'https://api.example.com  or  google.com' :
+    form.checkType === 'http'  ? 'https://example.com  or  google.com' :
+    form.checkType === 'api'   ? 'https://api.example.com/health' :
     form.checkType === 'tcp'   ? '192.168.1.1  or  db.internal' :
                                   '192.168.1.1  or  router.local';
+
+  // Header row helpers for the custom headers section
+  const setHeader = (i, field, val) =>
+    set('requestHeaders', form.requestHeaders.map((h, idx) =>
+      idx === i ? { ...h, [field]: val } : h
+    ));
+  const addHeaderRow = () =>
+    set('requestHeaders', [...form.requestHeaders, { key: '', value: '' }]);
+  const removeHeaderRow = (i) =>
+    set('requestHeaders', form.requestHeaders.filter((_, idx) => idx !== i));
 
   // ── Derived input style ───────────────────────────────────────────────────
 
@@ -437,29 +482,154 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
 
           {/* HTTP-only fields */}
           {form.checkType === 'http' && (
+            <Field label="Degraded Threshold" hint="ms — leave blank to disable" t={t}>
+              <input type="number" min={1} max={60000}
+                value={form.degradedThreshold}
+                onChange={e => set('degradedThreshold', e.target.value)}
+                placeholder="e.g. 500"
+                className={inputCls} style={inputStyle}
+                onFocus={e => e.target.style.borderColor = '#f59e0b'}
+                onBlur={e  => e.target.style.borderColor = t.cardBorder}
+              />
+            </Field>
+          )}
+
+          {/* API-only fields */}
+          {form.checkType === 'api' && (
             <>
-              {/* Degraded threshold */}
-              <Field label="Degraded Threshold" hint="ms — leave blank to disable" t={t}>
-                <input type="number" min={1} max={60000}
-                  value={form.degradedThreshold}
-                  onChange={e => set('degradedThreshold', e.target.value)}
-                  placeholder="e.g. 500"
-                  className={inputCls} style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                  onBlur={e  => e.target.style.borderColor = t.cardBorder}
-                />
+              {/* Expected status + Auth type on one row */}
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Expected Status" hint="default 200" t={t}>
+                  <input type="number" min={100} max={599}
+                    value={form.expectedStatus}
+                    onChange={e => set('expectedStatus', e.target.value)}
+                    placeholder="200"
+                    className={inputCls} style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                  />
+                </Field>
+
+                <Field label="Authentication" t={t}>
+                  <select value={form.authType}
+                    onChange={e => set('authType', e.target.value)}
+                    className={inputCls} style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={e  => e.target.style.borderColor = t.cardBorder}>
+                    <option value="none">None</option>
+                    <option value="basic">Basic Auth</option>
+                    <option value="bearer">Bearer Token</option>
+                  </select>
+                </Field>
+              </div>
+
+              {/* Basic auth credentials */}
+              {form.authType === 'basic' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Username" t={t}>
+                    <input type="text" value={form.authUser}
+                      onChange={e => set('authUser', e.target.value)}
+                      placeholder="user"
+                      className={inputCls} style={inputStyle}
+                      onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                      onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                    />
+                  </Field>
+                  <Field label="Password" t={t}>
+                    <input type="password" value={form.authPass}
+                      onChange={e => set('authPass', e.target.value)}
+                      placeholder="••••••••"
+                      className={inputCls} style={inputStyle}
+                      onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                      onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {/* Bearer token */}
+              {form.authType === 'bearer' && (
+                <Field label="Bearer Token" t={t}>
+                  <input type="password" value={form.authToken}
+                    onChange={e => set('authToken', e.target.value)}
+                    placeholder="eyJ…"
+                    className={inputCls} style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                  />
+                </Field>
+              )}
+
+              {/* Custom headers */}
+              <Field label="Custom Headers" hint="up to 5 — leave blank to skip" t={t}>
+                <div className="space-y-1.5">
+                  {form.requestHeaders.slice(0, 5).map((h, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input type="text" value={h.key}
+                        onChange={e => setHeader(i, 'key', e.target.value)}
+                        placeholder="Header-Name"
+                        className={`${inputCls} flex-1`} style={inputStyle}
+                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                        onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                      />
+                      <input type="text" value={h.value}
+                        onChange={e => setHeader(i, 'value', e.target.value)}
+                        placeholder="value"
+                        className={`${inputCls} flex-1`} style={inputStyle}
+                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                        onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                      />
+                      {form.requestHeaders.length > 1 && (
+                        <button type="button" onClick={() => removeHeaderRow(i)}
+                          className="shrink-0 p-1 opacity-40 hover:opacity-80"
+                          style={{ color: t.textMuted }}>
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {form.requestHeaders.length < 5 && (
+                    <button type="button" onClick={addHeaderRow}
+                      className="flex items-center gap-1 text-xs font-mono px-2 py-1 rounded border transition-colors"
+                      style={{ color: t.textMuted, borderColor: t.tagBorder, backgroundColor: t.tagBg }}>
+                      <Plus size={10} /> Add Header
+                    </button>
+                  )}
+                </div>
               </Field>
 
-              {/* Body match */}
+              {/* Body Contains */}
               <Field label="Body Contains" hint="plain string, case-insensitive — leave blank to skip" t={t}>
                 <input type="text"
                   value={form.bodyMatch}
                   onChange={e => set('bodyMatch', e.target.value)}
-                  placeholder='e.g. "ok" or "status":"healthy"'
+                  placeholder='"ok"  or  "status":"healthy"'
                   className={inputCls} style={inputStyle}
                   onFocus={e => e.target.style.borderColor = '#a78bfa'}
                   onBlur={e  => e.target.style.borderColor = t.cardBorder}
                 />
+              </Field>
+
+              {/* JSON assertion */}
+              <Field label="JSON Assertion" hint="dot-path + expected value — leave blank to skip" t={t}>
+                <div className="flex gap-2">
+                  <input type="text" value={form.jsonPath}
+                    onChange={e => set('jsonPath', e.target.value)}
+                    placeholder="data.status"
+                    className={`${inputCls} flex-1`} style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = '#a78bfa'}
+                    onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                  />
+                  <span className="flex items-center text-xs font-mono shrink-0"
+                    style={{ color: t.textFaint }}>=</span>
+                  <input type="text" value={form.jsonExpected}
+                    onChange={e => set('jsonExpected', e.target.value)}
+                    placeholder="healthy"
+                    className={`${inputCls} flex-1`} style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = '#a78bfa'}
+                    onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                  />
+                </div>
               </Field>
             </>
           )}
