@@ -16,16 +16,31 @@ const TABS = [
   { id: 'notifications', label: 'Notifications',  Icon: Bell    },
 ];
 
+// Required fields per channel — used for pre-save validation
+const CHANNEL_VALIDATION = [
+  { label: 'Telegram', enabledKey: 'telegram_enabled',
+    fields: ['telegram_token', 'telegram_chat_id'] },
+  { label: 'Email',    enabledKey: 'email_enabled',
+    fields: ['email_smtp_host', 'email_smtp_port', 'email_smtp_user',
+             'email_smtp_pass', 'email_from', 'email_to'] },
+  { label: 'SMS',      enabledKey: 'twilio_enabled',
+    fields: ['twilio_account_sid', 'twilio_auth_token', 'twilio_from', 'twilio_to'] },
+  { label: 'Webhook',  enabledKey: 'webhook_enabled',
+    fields: ['webhook_url'] },
+];
+
 // ── SettingsPanel ─────────────────────────────────────────────────────────────
 
 export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) {
   const { t, isDark } = useTheme();
-  const [activeTab,  setActiveTab]  = useState('general');
-  const [settings,   setSettings]   = useState(DEFAULT_SETTINGS);
-  const [saving,     setSaving]     = useState(false);
-  const [saved,      setSaved]      = useState(false);
-  const [testState,  setTestState]  = useState({});
-  const [showPass,   setShowPass]   = useState({});
+  const [activeTab,     setActiveTab]     = useState('general');
+  const [settings,      setSettings]      = useState(DEFAULT_SETTINGS);
+  const [saving,        setSaving]        = useState(false);
+  const [saved,         setSaved]         = useState(false);
+  const [saveError,     setSaveError]     = useState('');
+  const [invalidFields, setInvalidFields] = useState(new Set());
+  const [testState,     setTestState]     = useState({});
+  const [showPass,      setShowPass]      = useState({});
 
   useEffect(() => {
     fetch('/api/settings')
@@ -34,10 +49,44 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) 
       .catch(console.error);
   }, []);
 
-  const set = (key, val) => setSettings(s => ({ ...s, [key]: val }));
+  const set = (key, val) => {
+    setSettings(s => ({ ...s, [key]: val }));
+    // Clear the error highlight for this field as soon as the user edits it
+    setInvalidFields(prev => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      if (next.size === 0) setSaveError('');
+      return next;
+    });
+  };
   const toggleShow = (key) => setShowPass(p => ({ ...p, [key]: !p[key] }));
 
   const save = async () => {
+    // Validate: every enabled channel must have all required fields filled
+    const missing  = new Set();
+    const badNames = [];
+
+    for (const { label, enabledKey, fields } of CHANNEL_VALIDATION) {
+      if (settings[enabledKey] !== '1') continue;
+      const empty = fields.filter(f => !settings[f]?.trim());
+      if (empty.length > 0) {
+        empty.forEach(f => missing.add(f));
+        badNames.push(label);
+      }
+    }
+
+    if (missing.size > 0) {
+      setSaveError(
+        `${badNames.join(' and ')} ${badNames.length === 1 ? 'is' : 'are'} enabled but ` +
+        `missing required fields. Please fill in the highlighted fields before saving.`
+      );
+      setInvalidFields(missing);
+      return;
+    }
+
+    setSaveError('');
+    setInvalidFields(new Set());
     setSaving(true);
     try {
       await fetch('/api/settings', {
@@ -205,6 +254,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) 
                 test={test}
                 inputCls={inputCls}
                 inputStyle={inputStyle}
+                invalidFields={invalidFields}
                 t={t}
                 isDark={isDark}
               />
@@ -214,15 +264,21 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) 
           {/* Footer — save only on Notifications tab */}
           {activeTab === 'notifications' && (
             <div
-              className="flex items-center justify-between px-7 py-4 border-t shrink-0"
+              className="flex items-center justify-between gap-4 px-7 py-4 border-t shrink-0"
               style={{ borderColor: t.cardBorder }}>
-              <span className="text-xs font-mono" style={{ color: t.textFaint }}>
-                Enable channels per monitor in the Edit form
-              </span>
+              {saveError
+                ? <span className="flex items-center gap-1.5 text-xs font-mono text-red-400 leading-snug">
+                    <AlertCircle size={13} className="shrink-0" />
+                    {saveError}
+                  </span>
+                : <span className="text-xs font-mono" style={{ color: t.textFaint }}>
+                    Enable channels per monitor in the Edit form
+                  </span>
+              }
               <button
                 onClick={save}
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-mono font-bold transition-all disabled:opacity-60"
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-mono font-bold transition-all disabled:opacity-60 shrink-0"
                 style={{
                   background: saved ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: '#fff',
@@ -262,31 +318,40 @@ function GeneralTab({ viewMode, onViewModeChange, t, isDark }) {
 
 // ── Notifications tab ─────────────────────────────────────────────────────────
 
-function NotificationsTab({ settings, set, showPass, toggleShow, testState, test, inputCls, inputStyle, t, isDark }) {
+function NotificationsTab({ settings, set, showPass, toggleShow, testState, test, inputCls, inputStyle, invalidFields, t, isDark }) {
+  // Returns input style with red border when the field has a validation error
+  const fs = (key) => invalidFields.has(key)
+    ? { ...inputStyle, borderColor: '#ef4444', boxShadow: '0 0 0 2px rgba(239,68,68,0.15)' }
+    : inputStyle;
+
+  // Whether any field in a set of keys is invalid (used to flag the channel card)
+  const channelHasError = (...keys) => keys.some(k => invalidFields.has(k));
+
   return (
     <div className="space-y-4">
       <Channel
         title="Telegram"
         description="Free push notifications via Telegram Bot API"
         enabled={settings.telegram_enabled === '1'}
+        hasError={channelHasError('telegram_token', 'telegram_chat_id')}
         onToggle={v => set('telegram_enabled', v ? '1' : '')}
         testState={testState.telegram}
         onTest={() => test('telegram')}
         t={t}
         isDark={isDark}>
-        <Field label="Bot Token" t={t}>
+        <Field label="Bot Token" invalid={invalidFields.has('telegram_token')} t={t}>
           <PasswordInput value={settings.telegram_token}
             onChange={v => set('telegram_token', v)}
             show={showPass.telegram_token}
             onToggle={() => toggleShow('telegram_token')}
             placeholder="123456:ABC-DEF..."
-            cls={inputCls} style={inputStyle} t={t} />
+            cls={inputCls} style={fs('telegram_token')} t={t} />
         </Field>
-        <Field label="Chat ID" t={t}>
+        <Field label="Chat ID" invalid={invalidFields.has('telegram_chat_id')} t={t}>
           <input value={settings.telegram_chat_id}
             onChange={e => set('telegram_chat_id', e.target.value)}
             placeholder="-1001234567890"
-            className={inputCls} style={inputStyle} />
+            className={inputCls} style={fs('telegram_chat_id')} />
         </Field>
       </Channel>
 
@@ -294,51 +359,52 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
         title="Email"
         description="SMTP delivery — works with Gmail App Passwords, Brevo, Resend, or any relay"
         enabled={settings.email_enabled === '1'}
+        hasError={channelHasError('email_smtp_host', 'email_smtp_port', 'email_smtp_user', 'email_smtp_pass', 'email_from', 'email_to')}
         onToggle={v => set('email_enabled', v ? '1' : '')}
         testState={testState.email}
         onTest={() => test('email')}
         t={t}
         isDark={isDark}>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="SMTP Host" t={t}>
+          <Field label="SMTP Host" invalid={invalidFields.has('email_smtp_host')} t={t}>
             <input value={settings.email_smtp_host}
               onChange={e => set('email_smtp_host', e.target.value)}
               placeholder="smtp.gmail.com"
-              className={inputCls} style={inputStyle} />
+              className={inputCls} style={fs('email_smtp_host')} />
           </Field>
-          <Field label="Port" t={t}>
+          <Field label="Port" invalid={invalidFields.has('email_smtp_port')} t={t}>
             <input value={settings.email_smtp_port}
               onChange={e => set('email_smtp_port', e.target.value)}
               placeholder="587"
-              className={inputCls} style={inputStyle} />
+              className={inputCls} style={fs('email_smtp_port')} />
           </Field>
         </div>
-        <Field label="Username" t={t}>
+        <Field label="Username" invalid={invalidFields.has('email_smtp_user')} t={t}>
           <input value={settings.email_smtp_user}
             onChange={e => set('email_smtp_user', e.target.value)}
             placeholder="you@gmail.com"
-            className={inputCls} style={inputStyle} />
+            className={inputCls} style={fs('email_smtp_user')} />
         </Field>
-        <Field label="Password / App Password" t={t}>
+        <Field label="Password / App Password" invalid={invalidFields.has('email_smtp_pass')} t={t}>
           <PasswordInput value={settings.email_smtp_pass}
             onChange={v => set('email_smtp_pass', v)}
             show={showPass.email_smtp_pass}
             onToggle={() => toggleShow('email_smtp_pass')}
             placeholder="••••••••••••••••"
-            cls={inputCls} style={inputStyle} t={t} />
+            cls={inputCls} style={fs('email_smtp_pass')} t={t} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="From" t={t}>
+          <Field label="From" invalid={invalidFields.has('email_from')} t={t}>
             <input value={settings.email_from}
               onChange={e => set('email_from', e.target.value)}
               placeholder="alerts@example.com"
-              className={inputCls} style={inputStyle} />
+              className={inputCls} style={fs('email_from')} />
           </Field>
-          <Field label="To" t={t}>
+          <Field label="To" invalid={invalidFields.has('email_to')} t={t}>
             <input value={settings.email_to}
               onChange={e => set('email_to', e.target.value)}
               placeholder="you@example.com"
-              className={inputCls} style={inputStyle} />
+              className={inputCls} style={fs('email_to')} />
           </Field>
         </div>
       </Channel>
@@ -347,37 +413,38 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
         title="SMS via Twilio"
         description="Paid per message (~$0.008/msg) — requires a Twilio account and purchased phone number"
         enabled={settings.twilio_enabled === '1'}
+        hasError={channelHasError('twilio_account_sid', 'twilio_auth_token', 'twilio_from', 'twilio_to')}
         onToggle={v => set('twilio_enabled', v ? '1' : '')}
         testState={testState.twilio}
         onTest={() => test('twilio')}
         t={t}
         isDark={isDark}>
-        <Field label="Account SID" t={t}>
+        <Field label="Account SID" invalid={invalidFields.has('twilio_account_sid')} t={t}>
           <input value={settings.twilio_account_sid}
             onChange={e => set('twilio_account_sid', e.target.value)}
             placeholder="ACxxxxxxxxxxxxxxxx"
-            className={inputCls} style={inputStyle} />
+            className={inputCls} style={fs('twilio_account_sid')} />
         </Field>
-        <Field label="Auth Token" t={t}>
+        <Field label="Auth Token" invalid={invalidFields.has('twilio_auth_token')} t={t}>
           <PasswordInput value={settings.twilio_auth_token}
             onChange={v => set('twilio_auth_token', v)}
             show={showPass.twilio_auth_token}
             onToggle={() => toggleShow('twilio_auth_token')}
             placeholder="••••••••••••••••"
-            cls={inputCls} style={inputStyle} t={t} />
+            cls={inputCls} style={fs('twilio_auth_token')} t={t} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="From Number" t={t}>
+          <Field label="From Number" invalid={invalidFields.has('twilio_from')} t={t}>
             <input value={settings.twilio_from}
               onChange={e => set('twilio_from', e.target.value)}
               placeholder="+15551234567"
-              className={inputCls} style={inputStyle} />
+              className={inputCls} style={fs('twilio_from')} />
           </Field>
-          <Field label="To Number" t={t}>
+          <Field label="To Number" invalid={invalidFields.has('twilio_to')} t={t}>
             <input value={settings.twilio_to}
               onChange={e => set('twilio_to', e.target.value)}
               placeholder="+15559876543"
-              className={inputCls} style={inputStyle} />
+              className={inputCls} style={fs('twilio_to')} />
           </Field>
         </div>
       </Channel>
@@ -386,16 +453,17 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
         title="Webhook"
         description="POST a JSON payload to any URL — works with Slack, Discord, n8n, Zapier, Make, and more"
         enabled={settings.webhook_enabled === '1'}
+        hasError={channelHasError('webhook_url')}
         onToggle={v => set('webhook_enabled', v ? '1' : '')}
         testState={testState.webhook}
         onTest={() => test('webhook')}
         t={t}
         isDark={isDark}>
-        <Field label="Webhook URL" t={t}>
+        <Field label="Webhook URL" invalid={invalidFields.has('webhook_url')} t={t}>
           <input value={settings.webhook_url}
             onChange={e => set('webhook_url', e.target.value)}
             placeholder="https://hooks.slack.com/services/…"
-            className={inputCls} style={inputStyle} />
+            className={inputCls} style={fs('webhook_url')} />
         </Field>
       </Channel>
     </div>
@@ -455,7 +523,7 @@ function Toggle({ enabled, onToggle, isDark }) {
   );
 }
 
-function Channel({ title, description, enabled, onToggle, testState, onTest, children, t, isDark }) {
+function Channel({ title, description, enabled, hasError = false, onToggle, testState, onTest, children, t, isDark }) {
   const isLoading = testState === 'loading';
   const isOk      = testState === 'ok';
   const isError   = testState && testState !== 'loading' && testState !== 'ok';
@@ -464,9 +532,11 @@ function Channel({ title, description, enabled, onToggle, testState, onTest, chi
     <div
       className="rounded-xl border overflow-hidden"
       style={{
-        borderColor: enabled
-          ? isDark ? 'rgba(59,130,246,0.3)' : 'rgba(59,130,246,0.25)'
-          : t.cardBorder,
+        borderColor: hasError
+          ? '#ef4444'
+          : enabled
+            ? isDark ? 'rgba(59,130,246,0.3)' : 'rgba(59,130,246,0.25)'
+            : t.cardBorder,
         transition: 'border-color 0.2s',
       }}>
 
@@ -537,12 +607,12 @@ function Channel({ title, description, enabled, onToggle, testState, onTest, chi
   );
 }
 
-function Field({ label, children, t }) {
+function Field({ label, invalid = false, children, t }) {
   return (
     <div>
       <label className="block text-xs font-mono font-medium uppercase tracking-wider mb-1.5"
-        style={{ color: t.textMuted }}>
-        {label}
+        style={{ color: invalid ? '#f87171' : t.textMuted }}>
+        {label}{invalid && <span className="ml-1 normal-case tracking-normal">— required</span>}
       </label>
       {children}
     </div>
