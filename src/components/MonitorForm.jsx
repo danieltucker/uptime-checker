@@ -21,6 +21,16 @@ const ALERT_ROWS = [
   { key: 'recovered', label: 'Recovered', hint: 'back to healthy' },
 ];
 
+// Which settings keys must be non-empty for a channel to be considered configured
+const CHANNEL_CREDENTIAL_KEYS = {
+  Telegram: ['telegram_token', 'telegram_chat_id'],
+  Email:    ['email_smtp_host', 'email_smtp_user', 'email_smtp_pass', 'email_from', 'email_to'],
+  SMS:      ['twilio_account_sid', 'twilio_auth_token', 'twilio_from', 'twilio_to'],
+};
+
+// Channels that are always available regardless of settings
+const ALWAYS_AVAILABLE = new Set(['Webhook', 'None']);
+
 const DEFAULT_FORM = {
   target:           '',
   label:            '',
@@ -30,6 +40,7 @@ const DEFAULT_FORM = {
   interval:         60,
   alertTypes:       ['None'],
   degradedThreshold: '',
+  bodyMatch:        '',
   alertConfig:      DEFAULT_ALERT_CONFIG,
   tags:             [],
   tagInput:         '',
@@ -37,12 +48,22 @@ const DEFAULT_FORM = {
 
 export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = false, allTags = [] }) {
   const { t } = useTheme();
-  const [form, setForm] = useState(DEFAULT_FORM);
+  const [form,       setForm]       = useState(DEFAULT_FORM);
+  const [settings,   setSettings]   = useState({});
+  const [formError,  setFormError]  = useState('');
 
   // Tag autocomplete state
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const tagInputRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  // Load saved settings so we know which channels are configured
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(setSettings)
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (editingMonitor) {
@@ -61,6 +82,7 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
         interval:          editingMonitor.interval,
         alertTypes:        editingMonitor.alertTypes,
         degradedThreshold: editingMonitor.degradedThreshold ?? '',
+        bodyMatch:         editingMonitor.bodyMatch ?? '',
         alertConfig,
         tags:              editingMonitor.tags.filter(t => t !== '_ref'),
         tagInput:          '',
@@ -68,7 +90,24 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
     } else {
       setForm(DEFAULT_FORM);
     }
+    setFormError('');
   }, [editingMonitor]);
+
+  // Whether a channel is toggled enabled in Settings (i.e. should be shown as an option)
+  const channelEnabled = (type) => {
+    if (ALWAYS_AVAILABLE.has(type)) return true;
+    if (type === 'Telegram') return settings.telegram_enabled === '1';
+    if (type === 'Email')    return settings.email_enabled    === '1';
+    if (type === 'SMS')      return settings.twilio_enabled   === '1';
+    return false;
+  };
+
+  // Whether a channel has all required credentials filled in
+  const channelConfigured = (type) => {
+    if (ALWAYS_AVAILABLE.has(type)) return true;
+    const keys = CHANNEL_CREDENTIAL_KEYS[type] ?? [];
+    return keys.every(k => settings[k]?.trim());
+  };
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -145,6 +184,20 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.target.trim()) return;
+
+    // Validate: selected channels must have credentials saved in Settings
+    const missingCreds = form.alertTypes.filter(
+      type => !ALWAYS_AVAILABLE.has(type) && !channelConfigured(type)
+    );
+    if (missingCreds.length > 0) {
+      setFormError(
+        `${missingCreds.join(', ')} ${missingCreds.length === 1 ? 'has' : 'have'} no saved credentials. ` +
+        `Add them in Settings before enabling this channel.`
+      );
+      return;
+    }
+
+    setFormError('');
     const finalTags = form.tagInput.trim()
       ? [...new Set([...form.tags, form.tagInput.trim()])]
       : form.tags;
@@ -157,6 +210,7 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
       interval:          form.interval,
       alertTypes:        form.alertTypes,
       degradedThreshold: form.degradedThreshold !== '' ? Number(form.degradedThreshold) : null,
+      bodyMatch:         form.checkType === 'http' && form.bodyMatch.trim() ? form.bodyMatch.trim() : null,
       alertConfig:       form.alertConfig,
       tags:              finalTags,
     });
@@ -355,37 +409,56 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
             </Field>
           </div>
 
-          {/* Alert types */}
-          <Field label="Notification Channels" hint="configure credentials in Settings" t={t}>
+          {/* Alert types — only show channels enabled in Settings */}
+          <Field label="Notification Channels" hint="enable channels in Settings" t={t}>
             <div className="flex flex-wrap gap-2 pt-0.5">
-              {ALERT_TYPES.map(type => {
-                const active = form.alertTypes.includes(type);
+              {ALERT_TYPES.filter(channelEnabled).map(type => {
+                const active       = form.alertTypes.includes(type);
+                const misconfigured = active && !channelConfigured(type);
                 return (
-                  <button key={type} type="button" onClick={() => toggleAlert(type)}
+                  <button key={type} type="button" onClick={() => { toggleAlert(type); setFormError(''); }}
                     className="px-3 py-1.5 text-xs font-mono rounded border transition-colors"
-                    style={active
-                      ? { backgroundColor: 'rgba(59,130,246,0.15)', borderColor: 'rgba(59,130,246,0.5)', color: '#93c5fd' }
-                      : { backgroundColor: t.tagBg, borderColor: t.tagBorder, color: t.textMuted }
+                    style={misconfigured
+                      ? { backgroundColor: 'rgba(245,158,11,0.15)', borderColor: 'rgba(245,158,11,0.5)', color: '#fbbf24' }
+                      : active
+                        ? { backgroundColor: 'rgba(59,130,246,0.15)', borderColor: 'rgba(59,130,246,0.5)', color: '#93c5fd' }
+                        : { backgroundColor: t.tagBg, borderColor: t.tagBorder, color: t.textMuted }
                     }>
                     {type}
+                    {misconfigured && <span className="ml-1 opacity-70">⚠</span>}
                   </button>
                 );
               })}
             </div>
           </Field>
 
-          {/* Degraded threshold — HTTP only */}
+          {/* HTTP-only fields */}
           {form.checkType === 'http' && (
-            <Field label="Degraded Threshold" hint="ms — leave blank to disable" t={t}>
-              <input type="number" min={1} max={60000}
-                value={form.degradedThreshold}
-                onChange={e => set('degradedThreshold', e.target.value)}
-                placeholder="e.g. 500"
-                className={inputCls} style={inputStyle}
-                onFocus={e => e.target.style.borderColor = '#f59e0b'}
-                onBlur={e  => e.target.style.borderColor = t.cardBorder}
-              />
-            </Field>
+            <>
+              {/* Degraded threshold */}
+              <Field label="Degraded Threshold" hint="ms — leave blank to disable" t={t}>
+                <input type="number" min={1} max={60000}
+                  value={form.degradedThreshold}
+                  onChange={e => set('degradedThreshold', e.target.value)}
+                  placeholder="e.g. 500"
+                  className={inputCls} style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = '#f59e0b'}
+                  onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                />
+              </Field>
+
+              {/* Body match */}
+              <Field label="Body Contains" hint="plain string, case-insensitive — leave blank to skip" t={t}>
+                <input type="text"
+                  value={form.bodyMatch}
+                  onChange={e => set('bodyMatch', e.target.value)}
+                  placeholder='e.g. "ok" or "status":"healthy"'
+                  className={inputCls} style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = '#a78bfa'}
+                  onBlur={e  => e.target.style.borderColor = t.cardBorder}
+                />
+              </Field>
+            </>
           )}
 
           {/* Alert behaviour per event type */}
@@ -445,6 +518,15 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
               })}
             </div>
           </Field>
+
+          {/* Form-level error */}
+          {formError && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded border text-xs font-mono"
+              style={{ backgroundColor: 'rgba(245,158,11,0.08)', borderColor: 'rgba(245,158,11,0.3)', color: '#fbbf24' }}>
+              <span className="shrink-0 mt-0.5">⚠</span>
+              {formError}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex justify-end items-center gap-3 pt-2 border-t"

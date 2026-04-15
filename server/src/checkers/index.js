@@ -20,6 +20,6 @@ export function runCheck(monitor) {
       return icmpCheck(monitor.target);
     case 'http':
     default:
-      return httpCheck(monitor.target);
+      return httpCheck(monitor.target, monitor.bodyMatch ?? null);
   }
 }

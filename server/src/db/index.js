@@ -24,6 +24,7 @@ db.exec(`
     tags               TEXT    NOT NULL DEFAULT '[]',
     check_type         TEXT    NOT NULL DEFAULT 'http',
     port               INTEGER,
+    body_match         TEXT,
     created_at         TEXT    NOT NULL
   );
 
@@ -69,6 +70,7 @@ db.exec(`
 for (const sql of [
   `ALTER TABLE monitors ADD COLUMN degraded_threshold INTEGER`,
   `ALTER TABLE monitors ADD COLUMN alert_config TEXT NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE monitors ADD COLUMN body_match TEXT`,
 ]) {
   try { db.exec(sql); } catch { /* column already exists */ }
 }
@@ -84,9 +86,10 @@ export function rowToMonitor(row) {
     alertTypes:       JSON.parse(row.alert_types),
     tags:             JSON.parse(row.tags),
     checkType:        row.check_type,
-    port:             row.port             ?? null,
+    port:             row.port              ?? null,
     degradedThreshold: row.degraded_threshold ?? null,
-    alertConfig:      row.alert_config      ?? '{}',
+    alertConfig:      row.alert_config       ?? '{}',
+    bodyMatch:        row.body_match         ?? null,
     createdAt:        row.created_at,
   };
 }

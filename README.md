@@ -35,6 +35,7 @@ Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing
 ### Alerts
 - **In-app alert panel** - bell icon surfaces active outages with a live elapsed-time counter; resolved alerts show total downtime; dismiss individually or all at once
 - **Three alert levels** - Outage, Degraded (configurable ping threshold), and Recovered; each with independent panel visibility and notification frequency (once / every 15 min)
+- **HTTP body validation** - optional plain-string check on the response body; treats a mismatch as DOWN even on a 2xx response
 - **Telegram** - free push notifications via Telegram Bot API
 - **Email** - SMTP delivery; works with Gmail App Passwords, Brevo, Resend, or any relay
 - **SMS** - Twilio integration (~$0.008/message)
@@ -43,6 +44,7 @@ Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing
 ### Settings
 - **Tabbed settings panel** - centered modal with General and Notifications tabs
 - **General tab** - dashboard-wide preferences including grouped vs flat view toggle
+- **Filtered channels** - per-monitor alert picker only shows channels enabled in Settings; incomplete credentials block save with an error
 
 ### Embed
 - **Per-monitor widget** - 360x230 iframe showing a single card with live updates
@@ -292,25 +294,45 @@ uptime-checker/
 
 ---
 
-## Roadmap
+## Changelog
 
-### v4 - Module System
+### v4.0.0
 
-A plugin architecture that extends WatchTower beyond uptime monitoring. Modules render as cards in the same grid as monitors and follow the same visual language, but each module defines its own data fetching, display, and alert logic.
-
-#### Card layout and sorting ✓ shipped
+#### Card layout and sorting
 
 - Cards can be manually reordered by dragging — grab anywhere in the card header and drop to rearrange; order persists in localStorage
 - Cards are resizable between 1-column and 2-column widths via the **Wide / Narrow** button in the card header; persists in localStorage
 - Resize is responsive: a 2-wide card stays 2 columns on wider viewports and collapses to full width on narrow ones
 - Drag-to-reorder is active in Default sort mode; switching to Uptime or Ping sort disables drag handles
 
-#### Settings panel ✓ shipped
+#### Settings panel
 
-- Centered modal with left-side vertical tab navigation
+- Redesigned as a fixed-size centered modal with left-side vertical tab navigation
 - **General tab** — dashboard-wide preferences including the grouped vs flat view toggle
-- **Notifications tab** — Telegram, Email, and SMS channel configuration (unchanged from v3)
-- Fixed 680 × 760px size; scrolls internally on smaller screens
+- **Notifications tab** — Telegram, Email, and SMS channel configuration
+
+---
+
+## Roadmap
+
+### v4.1.0 - Monitor improvements
+
+#### HTTP response body validation
+
+- Optional "Body Contains" field on HTTP monitors — plain string, case-insensitive
+- If set, the response body must contain the string or the check is treated as DOWN regardless of HTTP status code
+- Useful for `/health` endpoints that return `200 OK` with a degraded JSON payload
+- Response bodies over 256 KB are aborted and treated as a failed body check; the 256 KB cap also protects the server from memory exhaustion on large API responses
+- Body content is never stored — only the pass/fail result is recorded
+
+#### Alert channel filtering
+
+- The notification channel picker in the monitor form only shows channels that are toggled **enabled** in Settings
+- Selecting an enabled channel that has incomplete credentials shows a warning indicator and blocks save with a clear error message — preventing silent alert failures
+
+### v4.x - Module System
+
+A plugin architecture that extends WatchTower beyond uptime monitoring. Modules render as cards in the same grid as monitors and follow the same visual language, but each module defines its own data fetching, display, and alert logic.
 
 #### Module contract
 
@@ -348,13 +370,8 @@ Tags become first-class objects on the dashboard. The default view collapses eac
 
 #### Settings panel
 
-- **Left-side tab navigation** - the settings panel gains a vertical tab list on the left edge for navigating between sections: General, Notifications (Telegram / Email / SMS), and one tab per installed module that requires credentials
-- **General tab** - houses dashboard-wide preferences including the grouped vs flat view toggle and any future display options
-
-#### Monitor improvements
-
-- **HTTP response body validation** - optional expected string or regex on HTTP monitors; treat as DOWN if the body doesn't match even on a 2xx response. Useful for `/health` endpoints that return `200 OK` with a degraded payload.
-- **Hide unconfigured alert channels** - per-monitor alert type selection should only offer channels that have valid saved credentials in Settings.
+- **Left-side tab navigation** — navigates between General, Notifications, and one tab per installed module that requires credentials
+- **General tab** — dashboard-wide preferences including the grouped vs flat view toggle
 
 ---
 

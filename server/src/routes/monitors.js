@@ -148,7 +148,7 @@ router.post('/', (req, res) => {
   const {
     label, target, description = '', interval = 60,
     alertTypes = ['None'], tags = [], checkType = 'http', port,
-    degradedThreshold, alertConfig = {},
+    degradedThreshold, alertConfig = {}, bodyMatch,
   } = req.body;
 
   if (!target?.trim()) return res.status(400).json({ error: '`target` is required' });
@@ -158,10 +158,10 @@ router.post('/', (req, res) => {
   db.prepare(`
     INSERT INTO monitors
       (id, label, target, description, interval, alert_types, tags, check_type, port,
-       degraded_threshold, alert_config, created_at)
+       degraded_threshold, alert_config, body_match, created_at)
     VALUES
       (@id, @label, @target, @description, @interval, @alertTypes, @tags, @checkType, @port,
-       @degradedThreshold, @alertConfig, @createdAt)
+       @degradedThreshold, @alertConfig, @bodyMatch, @createdAt)
   `).run({
     id,
     label:             (label || target).trim(),
@@ -174,6 +174,7 @@ router.post('/', (req, res) => {
     port:              port ?? null,
     degradedThreshold: degradedThreshold ?? null,
     alertConfig:       JSON.stringify(alertConfig),
+    bodyMatch:         bodyMatch?.trim() || null,
     createdAt:         new Date().toISOString(),
   });
 
@@ -192,7 +193,7 @@ router.put('/:id', (req, res) => {
   const {
     label, target, description, interval,
     alertTypes, tags, checkType, port,
-    degradedThreshold, alertConfig,
+    degradedThreshold, alertConfig, bodyMatch,
   } = req.body;
 
   const next = {
@@ -206,6 +207,7 @@ router.put('/:id', (req, res) => {
     port:              port              ?? existing.port,
     degradedThreshold: degradedThreshold !== undefined ? (degradedThreshold ?? null) : existing.degraded_threshold,
     alertConfig:       JSON.stringify(alertConfig   ?? JSON.parse(existing.alert_config ?? '{}')),
+    bodyMatch:         bodyMatch !== undefined ? (bodyMatch?.trim() || null) : existing.body_match,
   };
 
   db.prepare(`
@@ -213,7 +215,8 @@ router.put('/:id', (req, res) => {
       label = @label, target = @target, description = @description,
       interval = @interval, alert_types = @alertTypes, tags = @tags,
       check_type = @checkType, port = @port,
-      degraded_threshold = @degradedThreshold, alert_config = @alertConfig
+      degraded_threshold = @degradedThreshold, alert_config = @alertConfig,
+      body_match = @bodyMatch
     WHERE id = @id
   `).run({ ...next, id });
 
