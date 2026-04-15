@@ -242,11 +242,11 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
       style={{ backgroundColor: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(2px)' }}
       onClick={(e) => e.target === e.currentTarget && !submitting && onCancel()}
     >
-      <div className="w-full max-w-lg rounded-lg shadow-2xl border"
-        style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+      <div className="w-full max-w-lg rounded-lg shadow-2xl border flex flex-col"
+        style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, maxHeight: 'calc(100vh - 2rem)' }}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b"
+        {/* Header — fixed */}
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0"
           style={{ borderColor: t.metricGap }}>
           <h2 className="text-xs font-mono font-bold uppercase tracking-widest"
             style={{ color: t.textSecondary }}>
@@ -259,7 +259,10 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+
+          {/* Scrollable fields area */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
           {/* Check type */}
           <Field label="Check Type" t={t}>
@@ -528,8 +531,10 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex justify-end items-center gap-3 pt-2 border-t"
+          </div>{/* end scrollable fields */}
+
+          {/* Actions — fixed footer */}
+          <div className="flex justify-end items-center gap-3 px-6 py-4 border-t shrink-0"
             style={{ borderColor: t.metricGap }}>
             <button type="button" onClick={onCancel} disabled={submitting}
               className="px-4 py-2 text-xs font-mono transition-colors disabled:opacity-40"

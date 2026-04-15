@@ -94,6 +94,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) 
           width:           '100%',
           maxWidth:        '760px',
           height:          '680px',
+          maxHeight:       'calc(100vh - 2rem)',
           boxShadow: isDark
             ? '0 25px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)'
             : '0 25px 80px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)',
