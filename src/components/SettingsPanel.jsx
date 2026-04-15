@@ -31,7 +31,7 @@ const CHANNEL_VALIDATION = [
 
 // ── SettingsPanel ─────────────────────────────────────────────────────────────
 
-export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) {
+export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange }) {
   const { t, isDark } = useTheme();
   const [activeTab,     setActiveTab]     = useState('general');
   const [settings,      setSettings]      = useState(DEFAULT_SETTINGS);
@@ -240,6 +240,8 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) 
               <GeneralTab
                 viewMode={viewMode}
                 onViewModeChange={onViewModeChange}
+                chartYMax={chartYMax}
+                onChartYMaxChange={onChartYMaxChange}
                 t={t}
                 isDark={isDark}
               />
@@ -298,7 +300,14 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange }) 
 
 // ── General tab ───────────────────────────────────────────────────────────────
 
-function GeneralTab({ viewMode, onViewModeChange, t, isDark }) {
+const CHART_Y_OPTIONS = [
+  { label: 'Auto',   value: 'auto' },
+  { label: '250ms',  value: '250'  },
+  { label: '500ms',  value: '500'  },
+  { label: '750ms',  value: '750'  },
+];
+
+function GeneralTab({ viewMode, onViewModeChange, chartYMax, onChartYMaxChange, t, isDark }) {
   return (
     <div className="space-y-3">
       <SettingRow
@@ -311,6 +320,22 @@ function GeneralTab({ viewMode, onViewModeChange, t, isDark }) {
           onToggle={v => onViewModeChange?.(v ? 'grouped' : 'flat')}
           isDark={isDark}
         />
+      </SettingRow>
+
+      <SettingRow
+        title="Sparkline Y-axis scale"
+        description="Maximum ping shown on sparkline graphs. Degraded threshold lines only appear when they fall within the visible range."
+        t={t}
+        isDark={isDark}>
+        <select
+          value={chartYMax}
+          onChange={e => onChartYMaxChange?.(e.target.value)}
+          className="text-xs font-mono rounded-lg border px-2.5 py-1.5 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
+          {CHART_Y_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </SettingRow>
     </div>
   );

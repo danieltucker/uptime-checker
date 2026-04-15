@@ -391,6 +391,24 @@ Existing HTTP monitors with a "Body Contains" value are automatically migrated t
 
 - Fixed an issue where the Settings panel allowed saving with alert channels toggled on but no credentials entered. Save now validates all enabled channels before writing to the database — missing required fields are highlighted in red with a "— required" label, the channel card border turns red, and an error message appears in the footer explaining which channels need attention. Errors clear field-by-field as the user fills them in.
 
+### v4.3.0
+
+#### Degraded threshold line on sparklines
+
+- When a degraded ping threshold is configured on an HTTP or API monitor, an amber dashed reference line is drawn across the sparkline at that value, making it easy to see at a glance which time buckets exceeded the threshold
+- The line respects the Y-axis scale setting — if the threshold value is above the visible range it simply won't appear, which is intentional
+
+#### Sparkline Y-axis scale
+
+- New setting in the **General** tab: **Sparkline Y-axis scale** — choose between Auto (natural data range), 250ms, 500ms, or 750ms
+- Setting persists across sessions; when a fixed scale is chosen all cards share the same Y-axis, making ping comparisons across monitors consistent
+- Combined with the degraded threshold line, a fixed scale guarantees the reference line is always visible when a threshold is set within that range
+
+#### Degraded threshold and alert row for API monitors
+
+- The **Degraded Threshold** field (ping ms) is now available on API check type monitors in addition to HTTP, since both check types perform timed HTTP requests and return identical timing data
+- The **Degraded** row in the Alert Behaviour table is now hidden for TCP and ICMP monitor types, where a ping threshold doesn't apply — only HTTP and API monitors show it
+
 ---
 
 ## Roadmap

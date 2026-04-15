@@ -24,7 +24,7 @@ import { EmbedModal }     from './components/EmbedModal';
 
 // ── Sortable card wrapper ─────────────────────────────────────────────────────
 
-function SortableMonitorCard({ monitor, onEdit, onDelete, onEmbed, width, onSetWidth, sortEnabled }) {
+function SortableMonitorCard({ monitor, onEdit, onDelete, onEmbed, width, onSetWidth, sortEnabled, chartYMax }) {
   const id = String(monitor.id);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -48,6 +48,7 @@ function SortableMonitorCard({ monitor, onEdit, onDelete, onEmbed, width, onSetW
         onSetWidth={onSetWidth}
         dragHandleProps={sortEnabled ? { ...attributes, ...listeners } : undefined}
         isDragging={isDragging}
+        chartYMax={chartYMax}
       />
     </div>
   );
@@ -101,11 +102,22 @@ export default function App() {
     catch { return 'flat'; }
   });
 
+  const [chartYMax, setChartYMax] = useState(() => {
+    try { return localStorage.getItem('wt-chart-y-max') || 'auto'; }
+    catch { return 'auto'; }
+  });
+
   const { moveCard, sortMonitors, getWidth, setWidth } = useCardLayout();
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
     try { localStorage.setItem('wt-view-mode', mode); }
+    catch {}
+  };
+
+  const handleChartYMaxChange = (val) => {
+    setChartYMax(val);
+    try { localStorage.setItem('wt-chart-y-max', val); }
     catch {}
   };
 
@@ -386,6 +398,7 @@ export default function App() {
                         width={getWidth(m.id)}
                         onSetWidth={(w) => setWidth(m.id, w)}
                         sortEnabled={sortEnabled}
+                        chartYMax={chartYMax}
                       />
                     ))}
                   </div>
@@ -437,6 +450,8 @@ export default function App() {
           onClose={() => setShowSettings(false)}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
+          chartYMax={chartYMax}
+          onChartYMaxChange={handleChartYMaxChange}
         />
       )}
 

@@ -1,6 +1,6 @@
 import React, { useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
+import { AreaChart, Area, YAxis, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
 import { Edit2, Trash2, Tag, ShieldCheck, ShieldAlert, Code, ArrowLeftRight, Minimize2 } from 'lucide-react';
 import { formatInterval, formatTimestamp, certDaysColor } from '../types/monitor';
 import { useTheme } from '../hooks/useTheme';
@@ -221,6 +221,8 @@ export function MonitorCard({
   dragHandleProps, isDragging = false,
   // Width control (optional — 1 = single col, 2 = double col)
   width = 1, onSetWidth,
+  // Chart Y-axis scale: 'auto' | '250' | '500' | '750'
+  chartYMax = 'auto',
 }) {
   const { t } = useTheme();
   const chartRef = useRef(null);
@@ -252,6 +254,15 @@ export function MonitorCard({
     monitor.uptimePercent >= 95   ? '#fbbf24' : '#f87171';
 
   const alertBadges = monitor.alertTypes?.filter(a => a !== 'None') ?? [];
+
+  // Y-axis domain — fixed max when set, otherwise auto-scale from 0
+  const yMax    = chartYMax === 'auto' ? 'auto' : Number(chartYMax);
+  const yDomain = [0, yMax];
+
+  // Show the degraded threshold line only for HTTP/API monitors that have one set
+  const showThresholdLine =
+    monitor.degradedThreshold != null &&
+    (monitor.checkType === 'http' || monitor.checkType === 'api');
 
   // ── Compact layout (reference monitors) ───────────────────────────────────
   if (compact) {
@@ -461,6 +472,7 @@ export function MonitorCard({
                     <stop offset="95%" stopColor={lineColor} stopOpacity={0} />
                   </linearGradient>
                 </defs>
+                <YAxis domain={yDomain} hide />
                 <Area type="monotone" dataKey="ping"
                   stroke={lineColor} strokeWidth={1.5}
                   fill={`url(#${gradientId})`}
@@ -468,6 +480,14 @@ export function MonitorCard({
                   activeDot={{ r: 3, fill: lineColor, strokeWidth: 0 }}
                   isAnimationActive={false}
                 />
+                {showThresholdLine && (
+                  <ReferenceLine
+                    y={monitor.degradedThreshold}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 3"
+                    strokeWidth={1}
+                  />
+                )}
                 <Tooltip content={tooltipContent}
                   cursor={{ stroke: t.cardBorder, strokeWidth: 1 }} />
               </AreaChart>

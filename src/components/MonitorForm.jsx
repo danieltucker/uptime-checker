@@ -482,8 +482,8 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
             </div>
           </Field>
 
-          {/* HTTP-only fields */}
-          {form.checkType === 'http' && (
+          {/* HTTP / API — degraded ping threshold */}
+          {(form.checkType === 'http' || form.checkType === 'api') && (
             <Field label="Degraded Threshold" hint="ms — leave blank to disable" t={t}>
               <input type="number" min={1} max={60000}
                 value={form.degradedThreshold}
@@ -646,7 +646,11 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
                 <span className="text-center">Show in Panel</span>
                 <span className="text-center">Notify</span>
               </div>
-              {ALERT_ROWS.map(({ key, label, hint }) => {
+              {ALERT_ROWS.filter(({ key }) =>
+                key !== 'degraded' ||
+                form.checkType === 'http' ||
+                form.checkType === 'api'
+              ).map(({ key, label, hint }) => {
                 const cfg = form.alertConfig[key];
                 return (
                   <div key={key}
