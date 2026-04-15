@@ -385,6 +385,12 @@ Existing HTTP monitors with a "Body Contains" value are automatically migrated t
 
 - Fixed Webhook appearing in the monitor notification channel picker even though it had no configuration UI and no implementation — selecting it previously fired nothing silently
 
+### v4.2.2
+
+#### Bug fix
+
+- Fixed an issue where the Settings panel allowed saving with alert channels toggled on but no credentials entered. Save now validates all enabled channels before writing to the database — missing required fields are highlighted in red with a "— required" label, the channel card border turns red, and an error message appears in the footer explaining which channels need attention. Errors clear field-by-field as the user fills them in.
+
 ---
 
 ## Roadmap
