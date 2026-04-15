@@ -47,12 +47,12 @@ export async function httpCheck(target, bodyMatch = null) {
       timeout:          { request: 10_000 },
       followRedirect:   true,
       throwHttpErrors:  false,
-      maxResponseSize:  BODY_SIZE_LIMIT,
+      ...(bodyMatch?.trim() ? { maxResponseSize: BODY_SIZE_LIMIT } : {}),
       headers:          { 'User-Agent': 'WatchTower/4.0 uptime-monitor' },
     });
   } catch (err) {
-    // got throws ERR_BODY_OVERFLOW when maxResponseSize is exceeded.
-    // The partial response (including status code and timings) is on err.response.
+    // got throws ERR_BODY_OVERFLOW when maxResponseSize is exceeded (only set
+    // when bodyMatch is active). The partial response is on err.response.
     if (err.code === 'ERR_BODY_OVERFLOW' && err.response) {
       response      = err.response;
       bodyTruncated = true;
