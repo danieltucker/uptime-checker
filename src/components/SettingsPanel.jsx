@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   email_smtp_user: '', email_smtp_pass: '', email_from: '', email_to: '',
   twilio_enabled: '', twilio_account_sid: '', twilio_auth_token: '',
   twilio_from: '', twilio_to: '',
+  webhook_enabled: '', webhook_url: '',
 };
 
 const TABS = [
@@ -379,6 +380,23 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
               className={inputCls} style={inputStyle} />
           </Field>
         </div>
+      </Channel>
+
+      <Channel
+        title="Webhook"
+        description="POST a JSON payload to any URL — works with Slack, Discord, n8n, Zapier, Make, and more"
+        enabled={settings.webhook_enabled === '1'}
+        onToggle={v => set('webhook_enabled', v ? '1' : '')}
+        testState={testState.webhook}
+        onTest={() => test('webhook')}
+        t={t}
+        isDark={isDark}>
+        <Field label="Webhook URL" t={t}>
+          <input value={settings.webhook_url}
+            onChange={e => set('webhook_url', e.target.value)}
+            placeholder="https://hooks.slack.com/services/…"
+            className={inputCls} style={inputStyle} />
+        </Field>
       </Channel>
     </div>
   );

@@ -130,6 +130,28 @@ export async function sendTwilioAlert(monitor, event, overrides = {}) {
   });
 }
 
+// ── Webhook ───────────────────────────────────────────────────────────────────
+
+export async function sendWebhookAlert(monitor, event, overrides = {}) {
+  const url = overrides.webhook_url ?? getSetting('webhook_url');
+  if (!url?.trim()) throw new Error('Webhook URL is not configured');
+
+  await got.post(url.trim(), {
+    json: {
+      event,
+      monitor: {
+        id:        monitor.id,
+        label:     monitor.label,
+        target:    monitor.target,
+        checkType: monitor.checkType ?? 'http',
+        tags:      monitor.tags ?? [],
+      },
+      timestamp: new Date().toISOString(),
+    },
+    timeout: { request: 10_000 },
+  });
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 
 export async function dispatchAlerts(monitor, event, overrides = {}) {
@@ -154,6 +176,12 @@ export async function dispatchAlerts(monitor, event, overrides = {}) {
     tasks.push(
       sendTwilioAlert(monitor, event, overrides)
         .catch(e => console.error(`[alerter] Twilio failed for ${monitor.label}:`, e.message))
+    );
+  }
+  if (types.includes('Webhook') && getSetting('webhook_enabled') === '1') {
+    tasks.push(
+      sendWebhookAlert(monitor, event, overrides)
+        .catch(e => console.error(`[alerter] Webhook failed for ${monitor.label}:`, e.message))
     );
   }
 

@@ -373,6 +373,18 @@ A dedicated check type for REST and JSON API endpoints. HTTP checks are now reac
 
 Existing HTTP monitors with a "Body Contains" value are automatically migrated to the API check type on first run. All other settings are preserved.
 
+### v4.2.1
+
+#### Webhook alert channel
+
+- New **Webhook** channel in the Notifications tab — paste any URL and WatchTower will POST a JSON payload on every alert event
+- Payload includes `event` (`down` / `degraded` / `recovered`), monitor details (`id`, `label`, `target`, `checkType`, `tags`), and a UTC timestamp; compatible with Slack incoming webhooks, Discord, n8n, Zapier, Make, ntfy.sh, and any HTTP endpoint
+- Behaves like all other channels: must be enabled in Settings before it appears in the monitor form, and save is blocked if the URL is missing
+
+#### Bug fix
+
+- Fixed Webhook appearing in the monitor notification channel picker even though it had no configuration UI and no implementation — selecting it previously fired nothing silently
+
 ---
 
 ## Roadmap

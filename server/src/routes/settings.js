@@ -1,7 +1,7 @@
 import { Router }                               from 'express';
 import { getSetting, setSetting, getAllSettings } from '../db/index.js';
 import { sendTelegramAlert, sendEmailAlert,
-         sendTwilioAlert }                        from '../alerter.js';
+         sendTwilioAlert, sendWebhookAlert }      from '../alerter.js';
 
 const router = Router();
 
@@ -11,6 +11,7 @@ const KNOWN_KEYS = [
   'email_smtp_user', 'email_smtp_pass', 'email_from', 'email_to',
   'twilio_enabled', 'twilio_account_sid', 'twilio_auth_token',
   'twilio_from', 'twilio_to',
+  'webhook_enabled', 'webhook_url',
 ];
 
 // ── GET /api/settings ─────────────────────────────────────────────────────────
@@ -48,6 +49,9 @@ router.post('/test/:channel', async (req, res) => {
         break;
       case 'twilio':
         await sendTwilioAlert(TEST_MONITOR, 'down', overrides);
+        break;
+      case 'webhook':
+        await sendWebhookAlert(TEST_MONITOR, 'down', overrides);
         break;
       default:
         return res.status(400).json({ error: 'Unknown channel' });

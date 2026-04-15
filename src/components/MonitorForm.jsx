@@ -26,10 +26,11 @@ const CHANNEL_CREDENTIAL_KEYS = {
   Telegram: ['telegram_token', 'telegram_chat_id'],
   Email:    ['email_smtp_host', 'email_smtp_user', 'email_smtp_pass', 'email_from', 'email_to'],
   SMS:      ['twilio_account_sid', 'twilio_auth_token', 'twilio_from', 'twilio_to'],
+  Webhook:  ['webhook_url'],
 };
 
 // Channels that are always available regardless of settings
-const ALWAYS_AVAILABLE = new Set(['Webhook', 'None']);
+const ALWAYS_AVAILABLE = new Set(['None']);
 
 const DEFAULT_FORM = {
   target:           '',
@@ -117,6 +118,7 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
     if (type === 'Telegram') return settings.telegram_enabled === '1';
     if (type === 'Email')    return settings.email_enabled    === '1';
     if (type === 'SMS')      return settings.twilio_enabled   === '1';
+    if (type === 'Webhook')  return settings.webhook_enabled  === '1';
     return false;
   };
 
