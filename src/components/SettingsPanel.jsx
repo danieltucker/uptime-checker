@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal } from 'lucide-react';
+import { X, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, Plus, Trash2, ExternalLink } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
+import { moduleRegistry } from '../modules/index.js';
+import { ModuleInstanceForm } from './ModuleInstanceForm.jsx';
 
 const DEFAULT_SETTINGS = {
   telegram_enabled: '', telegram_token: '', telegram_chat_id: '',
@@ -14,6 +16,7 @@ const DEFAULT_SETTINGS = {
 const TABS = [
   { id: 'general',       label: 'General',       Icon: SlidersHorizontal },
   { id: 'notifications', label: 'Notifications',  Icon: Bell    },
+  { id: 'modules',       label: 'Modules',        Icon: Puzzle  },
 ];
 
 // Required fields per channel — used for pre-save validation
@@ -31,10 +34,15 @@ const CHANNEL_VALIDATION = [
 
 // ── SettingsPanel ─────────────────────────────────────────────────────────────
 
-export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange }) {
+export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange, moduleInstances = [], onAddInstance, onDeleteInstance }) {
   const { t, isDark } = useTheme();
   const [activeTab,     setActiveTab]     = useState('general');
   const [settings,      setSettings]      = useState(DEFAULT_SETTINGS);
+  const [moduleSettings, setModuleSettings] = useState({});  // module.* keys
+  const [moduleSaving,   setModuleSaving]   = useState({});  // moduleId → bool
+  const [moduleSaved,    setModuleSaved]    = useState({});  // moduleId → bool
+  const [addingFor,      setAddingFor]      = useState(null); // moduleId for new instance form
+  const [instanceSubmitting, setInstanceSubmitting] = useState(false);
   const [saving,        setSaving]        = useState(false);
   const [saved,         setSaved]         = useState(false);
   const [saveError,     setSaveError]     = useState('');
@@ -45,9 +53,53 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
   useEffect(() => {
     fetch('/api/settings')
       .then(r => r.json())
-      .then(data => setSettings(s => ({ ...s, ...data })))
+      .then(data => {
+        // Separate module.* keys from notification keys
+        const notifData  = {};
+        const moduleData = {};
+        for (const [k, v] of Object.entries(data)) {
+          if (k.startsWith('module.')) moduleData[k] = v;
+          else notifData[k] = v;
+        }
+        setSettings(s => ({ ...s, ...notifData }));
+        setModuleSettings(moduleData);
+      })
       .catch(console.error);
   }, []);
+
+  const saveModuleSettings = async (moduleId, fields) => {
+    setModuleSaving(p => ({ ...p, [moduleId]: true }));
+    try {
+      const payload = {};
+      for (const [k, v] of Object.entries(fields)) {
+        payload[`module.${moduleId}.${k}`] = v;
+      }
+      await fetch('/api/settings', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      setModuleSettings(prev => ({ ...prev, ...payload }));
+      setModuleSaved(p => ({ ...p, [moduleId]: true }));
+      setTimeout(() => setModuleSaved(p => ({ ...p, [moduleId]: false })), 2500);
+    } catch (err) {
+      console.error('[modules] save failed:', err);
+    } finally {
+      setModuleSaving(p => ({ ...p, [moduleId]: false }));
+    }
+  };
+
+  const handleAddInstance = async (payload) => {
+    setInstanceSubmitting(true);
+    try {
+      await onAddInstance?.(payload);
+      setAddingFor(null);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setInstanceSubmitting(false);
+    }
+  };
 
   const set = (key, val) => {
     setSettings(s => ({ ...s, [key]: val }));
@@ -194,7 +246,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
           {/* Bottom decoration */}
           <div className="px-5 py-5">
             <div className="text-xs font-mono" style={{ color: t.textFaint }}>
-              WatchTower v4
+              WatchTower v4.4
             </div>
           </div>
         </aside>
@@ -210,9 +262,9 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
                 {TABS.find(tab => tab.id === activeTab)?.label}
               </h2>
               <p className="text-xs font-mono mt-0.5" style={{ color: t.textMuted }}>
-                {activeTab === 'general'
-                  ? 'Dashboard-wide display preferences'
-                  : 'Configure alert delivery channels'}
+                {activeTab === 'general'       ? 'Dashboard-wide display preferences'  :
+               activeTab === 'notifications' ? 'Configure alert delivery channels'   :
+                                              'Install modules and manage credentials'}
               </p>
             </div>
             <button
@@ -242,6 +294,19 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
                 onViewModeChange={onViewModeChange}
                 chartYMax={chartYMax}
                 onChartYMaxChange={onChartYMaxChange}
+                t={t}
+                isDark={isDark}
+              />
+            )}
+            {activeTab === 'modules' && (
+              <ModulesTab
+                moduleSettings={moduleSettings}
+                onSaveModuleSettings={saveModuleSettings}
+                moduleSaving={moduleSaving}
+                moduleSaved={moduleSaved}
+                moduleInstances={moduleInstances}
+                onAddClick={setAddingFor}
+                onDeleteInstance={onDeleteInstance}
                 t={t}
                 isDark={isDark}
               />
@@ -294,6 +359,17 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
           )}
         </div>
       </div>
+
+      {/* Module instance add form — rendered outside the modal so it stacks on top */}
+      {addingFor && (
+        <ModuleInstanceForm
+          moduleDef={moduleRegistry.get(addingFor)}
+          instance={null}
+          onSubmit={handleAddInstance}
+          onCancel={() => setAddingFor(null)}
+          submitting={instanceSubmitting}
+        />
+      )}
     </div>
   );
 }
@@ -323,8 +399,8 @@ function GeneralTab({ viewMode, onViewModeChange, chartYMax, onChartYMaxChange, 
       </SettingRow>
 
       <SettingRow
-        title="Sparkline Y-axis scale"
-        description="Maximum ping shown on sparkline graphs. Degraded threshold lines only appear when they fall within the visible range."
+        title="Chart scale"
+        description="Maximum ping value shown on all graphs. Auto adjusts to your data; a fixed value lets you compare monitors side by side on the same scale."
         t={t}
         isDark={isDark}>
         <select
@@ -491,6 +567,210 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
             className={inputCls} style={fs('webhook_url')} />
         </Field>
       </Channel>
+    </div>
+  );
+}
+
+// ── Modules tab ───────────────────────────────────────────────────────────────
+
+function ModulesTab({ moduleSettings, onSaveModuleSettings, moduleSaving, moduleSaved, moduleInstances, onAddClick, onDeleteInstance, t, isDark }) {
+  const mods = [...moduleRegistry.values()];
+
+  if (mods.length === 0) {
+    return (
+      <div className="py-12 text-center text-xs font-mono" style={{ color: t.textMuted }}>
+        No modules installed. See MODULES.md to build your own.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {mods.map(mod => {
+        const instances   = moduleInstances.filter(i => i.moduleId === mod.id);
+        const localValues = {};
+        for (const field of mod.settingsSchema ?? []) {
+          localValues[field.key] = moduleSettings[`module.${mod.id}.${field.key}`] ?? '';
+        }
+
+        return (
+          <ModuleSection
+            key={mod.id}
+            mod={mod}
+            localValues={localValues}
+            instances={instances}
+            saving={!!moduleSaving[mod.id]}
+            saved={!!moduleSaved[mod.id]}
+            onSave={fields => onSaveModuleSettings(mod.id, fields)}
+            onAddClick={() => onAddClick(mod.id)}
+            onDeleteInstance={onDeleteInstance}
+            t={t}
+            isDark={isDark}
+          />
+        );
+      })}
+
+      {/* Install instructions */}
+      <div className="rounded-xl border px-5 py-4 space-y-1"
+        style={{ borderColor: t.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}>
+        <div className="text-xs font-mono font-semibold" style={{ color: t.textSecondary }}>
+          Add a module
+        </div>
+        <div className="text-xs font-mono leading-relaxed" style={{ color: t.textMuted }}>
+          Drop a module folder into <span style={{ color: t.textSecondary }}>server/src/modules/</span> and{' '}
+          <span style={{ color: t.textSecondary }}>src/modules/</span>, then restart the server.
+          The module will appear here automatically.
+        </div>
+        <a
+          href="MODULES.md"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-mono mt-1"
+          style={{ color: '#60a5fa' }}>
+          Read MODULES.md <ExternalLink size={10} />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function ModuleSection({ mod, localValues, instances, saving, saved, onSave, onAddClick, onDeleteInstance, t, isDark }) {
+  const [fields, setFields] = useState({ ...localValues });
+  const [showPass, setShowPass] = useState({});
+
+  const setField    = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
+  const toggleShow  = (k)    => setShowPass(prev => ({ ...prev, [k]: !prev[k] }));
+
+  const inputCls   = 'w-full rounded-lg border px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/60 transition-all';
+  const inputStyle = { backgroundColor: t.inputBg, color: t.textPrimary, borderColor: t.cardBorder };
+  const IconComponent = mod.icon ? null : null; // resolved from frontend registry — icon is a component
+
+  return (
+    <div className="rounded-xl border overflow-hidden" style={{ borderColor: t.cardBorder }}>
+      {/* Module header */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b"
+        style={{
+          backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+          borderColor: t.cardBorder,
+        }}>
+        <div>
+          <div className="text-sm font-mono font-semibold" style={{ color: t.textPrimary }}>
+            {mod.name}
+            <span className="ml-2 text-xs font-normal" style={{ color: t.textFaint }}>v{mod.version}</span>
+          </div>
+          <div className="text-xs font-mono mt-0.5" style={{ color: t.textMuted }}>
+            {mod.description}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-5 py-4 space-y-4">
+        {/* Credential fields */}
+        {mod.settingsSchema?.length > 0 && (
+          <div className="space-y-3">
+            <div className="text-xs font-mono uppercase tracking-wider" style={{ color: t.textMuted }}>
+              Credentials
+            </div>
+            {mod.settingsSchema.map(field => (
+              <div key={field.key}>
+                <label className="block text-xs font-mono font-medium uppercase tracking-wider mb-1.5"
+                  style={{ color: t.textMuted }}>
+                  {field.label}{field.required ? ' *' : ''}
+                </label>
+                {field.type === 'password' ? (
+                  <div className="relative">
+                    <input
+                      type={showPass[field.key] ? 'text' : 'password'}
+                      value={fields[field.key] ?? ''}
+                      onChange={e => setField(field.key, e.target.value)}
+                      placeholder={field.placeholder ?? ''}
+                      className={inputCls}
+                      style={{ ...inputStyle, paddingRight: '2.75rem' }}
+                    />
+                    <button type="button" onClick={() => toggleShow(field.key)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-80"
+                      style={{ color: t.textSecondary }}>
+                      {showPass[field.key] ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={fields[field.key] ?? ''}
+                    onChange={e => setField(field.key, e.target.value)}
+                    placeholder={field.placeholder ?? ''}
+                    className={inputCls}
+                    style={inputStyle}
+                  />
+                )}
+                {field.hint && (
+                  <p className="text-xs font-mono mt-1 leading-relaxed" style={{ color: t.textFaint }}>
+                    {field.hint}
+                  </p>
+                )}
+              </div>
+            ))}
+            <button
+              onClick={() => onSave(fields)}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-mono font-bold transition-all disabled:opacity-60"
+              style={{
+                background:  saved ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                color:       '#fff',
+                boxShadow:   saved ? '0 2px 8px rgba(34,197,94,0.3)' : '0 2px 8px rgba(59,130,246,0.3)',
+              }}>
+              {saving ? <><Loader size={11} className="animate-spin" /> Saving…</> :
+               saved  ? <><CheckCircle size={11} /> Saved</>                      :
+                        'Save credentials'}
+            </button>
+          </div>
+        )}
+
+        {/* Instances */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-mono uppercase tracking-wider" style={{ color: t.textMuted }}>
+              Dashboard cards ({instances.length})
+            </div>
+            <button
+              onClick={onAddClick}
+              className="flex items-center gap-1 text-xs font-mono px-2.5 py-1 rounded-lg border transition-colors"
+              style={{ borderColor: t.cardBorder, color: t.textSecondary, backgroundColor: t.tagBg }}>
+              <Plus size={11} /> Add card
+            </button>
+          </div>
+          {instances.length === 0 ? (
+            <p className="text-xs font-mono" style={{ color: t.textFaint }}>
+              No cards added yet. Click "Add card" to place one on the dashboard.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {instances.map(inst => (
+                <div key={inst.id}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg border"
+                  style={{ borderColor: t.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}>
+                  <div>
+                    <span className="text-xs font-mono font-semibold" style={{ color: t.textPrimary }}>
+                      {inst.label}
+                    </span>
+                    {inst.tags?.length > 0 && (
+                      <span className="ml-2 text-xs font-mono" style={{ color: t.textFaint }}>
+                        {inst.tags.join(', ')}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => onDeleteInstance?.(inst.id)}
+                    className="p-1 rounded opacity-40 hover:opacity-100 transition-opacity"
+                    style={{ color: t.textSecondary }}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

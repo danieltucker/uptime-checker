@@ -409,6 +409,34 @@ Existing HTTP monitors with a "Body Contains" value are automatically migrated t
 - The **Degraded Threshold** field (ping ms) is now available on API check type monitors in addition to HTTP, since both check types perform timed HTTP requests and return identical timing data
 - The **Degraded** row in the Alert Behaviour table is now hidden for TCP and ICMP monitor types, where a ping threshold doesn't apply — only HTTP and API monitors show it
 
+### v4.4.0
+
+#### Module system
+
+A plugin architecture that extends WatchTower beyond uptime monitoring. Modules render as cards in the **Modules** section of the main dashboard grid and follow the same visual language as monitor cards.
+
+- **Auto-discovery** - drop a module folder into `server/src/modules/` and `src/modules/` and restart; no manual registration required
+- **Module instances** - one module type can have multiple cards (e.g. one Cloudflare Analytics card per zone)
+- **Credentials** - module API keys are stored in the existing `settings` table under a namespaced prefix and managed in **Settings > Modules**
+- **Per-instance config** - instance-specific fields (e.g. Zone ID) are defined by the module and collected when adding a card
+- **Manual refresh** - each module card has a refresh button to fetch data on demand
+- **MODULES.md** - full documentation for building new modules
+
+#### Bundled modules
+
+**Claude API Usage** - polls the Anthropic Admin API for token usage across models for the current billing period. Requires an Admin API key from the Anthropic Console (standard inference keys do not have usage read access).
+
+**Cloudflare Analytics** - queries the Cloudflare GraphQL Analytics API for a configured zone. Shows 7-day totals for requests, pageviews, unique visitors, and bandwidth, plus a daily requests bar chart. Requires a Cloudflare API token with `Analytics:Read` permission and a Zone ID.
+
+#### Settings panel
+
+- New **Modules** tab — lists installed modules, credential fields, and dashboard card instances; supports adding and removing cards without leaving Settings
+- Version label updated to v4.4
+
+#### Y-axis scale setting
+
+- Renamed from "Sparkline Y-axis scale" to "Chart scale" with a simpler description
+
 ---
 
 ## Roadmap

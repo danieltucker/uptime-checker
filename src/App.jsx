@@ -11,16 +11,20 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-import { useMonitors }    from './hooks/useMonitors';
-import { useAlerts }      from './hooks/useAlerts';
-import { useTheme }       from './hooks/useTheme';
-import { useCardLayout }  from './hooks/useCardLayout';
-import { SummaryBar }     from './components/SummaryBar';
-import { MonitorCard }    from './components/MonitorCard';
-import { MonitorForm }    from './components/MonitorForm';
-import { AlertsPanel }    from './components/AlertsPanel';
-import { SettingsPanel }  from './components/SettingsPanel';
-import { EmbedModal }     from './components/EmbedModal';
+import { useMonitors }         from './hooks/useMonitors';
+import { useAlerts }           from './hooks/useAlerts';
+import { useTheme }            from './hooks/useTheme';
+import { useCardLayout }       from './hooks/useCardLayout';
+import { useModuleInstances }  from './hooks/useModuleInstances';
+import { SummaryBar }          from './components/SummaryBar';
+import { MonitorCard }         from './components/MonitorCard';
+import { ModuleCard }          from './components/ModuleCard';
+import { MonitorForm }         from './components/MonitorForm';
+import { ModuleInstanceForm }  from './components/ModuleInstanceForm';
+import { AlertsPanel }         from './components/AlertsPanel';
+import { SettingsPanel }       from './components/SettingsPanel';
+import { EmbedModal }          from './components/EmbedModal';
+import { moduleRegistry }      from './modules/index.js';
 
 // ── Sortable card wrapper ─────────────────────────────────────────────────────
 
@@ -88,6 +92,7 @@ export default function App() {
   const { monitors, loading, error, addMonitor, updateMonitor, deleteMonitor } = useMonitors(historyWindow);
 
   const { alerts, dismiss: dismissAlert, dismissAll } = useAlerts();
+  const { instances, addInstance, updateInstance, deleteInstance } = useModuleInstances();
 
   const [showForm,       setShowForm]       = useState(false);
   const [editingMonitor, setEditingMonitor] = useState(null);
@@ -95,8 +100,9 @@ export default function App() {
   const [tagFilter,      setTagFilter]      = useState([]);
   const [showAlerts,     setShowAlerts]     = useState(false);
   const [sortBy,         setSortBy]         = useState('default');
-  const [showSettings,   setShowSettings]   = useState(false);
-  const [embedMonitor,   setEmbedMonitor]   = useState(null);   // null = closed, undefined = full-page
+  const [showSettings,    setShowSettings]    = useState(false);
+  const [embedMonitor,    setEmbedMonitor]    = useState(null);
+  const [editingInstance, setEditingInstance] = useState(null);  // module instance being edited
   const [viewMode,       setViewMode]       = useState(() => {
     try { return localStorage.getItem('wt-view-mode') || 'flat'; }
     catch { return 'flat'; }
@@ -232,7 +238,7 @@ export default function App() {
             </span>
             <span className="hidden sm:inline text-xs font-mono px-2 py-0.5 rounded border"
               style={{ color: t.textFaint, borderColor: t.cardBorder }}>
-              uptime monitor · v4
+              uptime monitor · v4.4
             </span>
           </div>
 
@@ -406,6 +412,30 @@ export default function App() {
               </DndContext>
             )}
 
+            {/* ── Module instances ──────────────────────────────────────── */}
+            {instances.length > 0 && (
+              <section>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-px flex-1" style={{ backgroundColor: t.cardBorder }} />
+                  <span className="text-xs font-mono uppercase tracking-widest px-1"
+                    style={{ color: t.textFaint }}>
+                    Modules
+                  </span>
+                  <div className="h-px flex-1" style={{ backgroundColor: t.cardBorder }} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {instances.filter(i => i.enabled).map(inst => (
+                    <ModuleCard
+                      key={inst.id}
+                      instance={inst}
+                      onEdit={setEditingInstance}
+                      onDelete={deleteInstance}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* ── Network Reference section ──────────────────────────────── */}
             {refMonitors.length > 0 && (
               <section>
@@ -452,6 +482,22 @@ export default function App() {
           onViewModeChange={handleViewModeChange}
           chartYMax={chartYMax}
           onChartYMaxChange={handleChartYMaxChange}
+          moduleInstances={instances}
+          onAddInstance={addInstance}
+          onDeleteInstance={deleteInstance}
+        />
+      )}
+
+      {editingInstance && (
+        <ModuleInstanceForm
+          moduleDef={moduleRegistry.get(editingInstance.moduleId)}
+          instance={editingInstance}
+          onSubmit={async (data) => {
+            await updateInstance(editingInstance.id, data);
+            setEditingInstance(null);
+          }}
+          onCancel={() => setEditingInstance(null)}
+          submitting={false}
         />
       )}
 

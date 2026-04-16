@@ -20,6 +20,10 @@ router.get('/', (_req, res) => {
   const stored = getAllSettings();
   const result = {};
   for (const key of KNOWN_KEYS) result[key] = stored[key] ?? '';
+  // Also return any module.* keys that exist in the DB
+  for (const [key, value] of Object.entries(stored)) {
+    if (key.startsWith('module.')) result[key] = value;
+  }
   res.json(result);
 });
 
@@ -28,6 +32,10 @@ router.get('/', (_req, res) => {
 router.put('/', (req, res) => {
   for (const key of KNOWN_KEYS) {
     if (key in req.body) setSetting(key, req.body[key]);
+  }
+  // Also persist any module.* keys
+  for (const [key, value] of Object.entries(req.body)) {
+    if (key.startsWith('module.')) setSetting(key, value);
   }
   res.json({ ok: true });
 });

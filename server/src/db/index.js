@@ -72,6 +72,21 @@ db.exec(`
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
   );
+
+  CREATE TABLE IF NOT EXISTS module_instances (
+    id          TEXT    PRIMARY KEY,
+    module_id   TEXT    NOT NULL,
+    label       TEXT    NOT NULL DEFAULT '',
+    description TEXT    NOT NULL DEFAULT '',
+    interval    INTEGER NOT NULL DEFAULT 3600,
+    tags        TEXT    NOT NULL DEFAULT '[]',
+    alert_types TEXT    NOT NULL DEFAULT '["None"]',
+    config      TEXT    NOT NULL DEFAULT '{}',
+    position    INTEGER NOT NULL DEFAULT 0,
+    col_span    INTEGER NOT NULL DEFAULT 1,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // ── Migrations for existing databases ─────────────────────────────────────────

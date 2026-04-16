@@ -1,11 +1,13 @@
-import express        from 'express';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { sseHandler }   from './sse.js';
-import { initScheduler } from './scheduler.js';
-import monitorsRouter   from './routes/monitors.js';
-import settingsRouter   from './routes/settings.js';
-import alertsRouter     from './routes/alerts.js';
+import express                from 'express';
+import { join, dirname }      from 'node:path';
+import { fileURLToPath }      from 'node:url';
+import { sseHandler }         from './sse.js';
+import { initScheduler }      from './scheduler.js';
+import monitorsRouter         from './routes/monitors.js';
+import settingsRouter         from './routes/settings.js';
+import alertsRouter           from './routes/alerts.js';
+import moduleInstancesRouter  from './routes/module-instances.js';
+import { loadModules, registry } from './modules/registry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT      = process.env.PORT ?? 3000;
@@ -17,19 +19,24 @@ app.use(express.json());
 const PUBLIC_DIR = join(__dirname, '../public');
 app.use(express.static(PUBLIC_DIR));
 
+// ── Load modules (async dynamic imports) ──────────────────────────────────────
+await loadModules();
+
+// Mount per-module routers at /api/modules/:moduleId/...
+for (const [id, def] of registry) {
+  if (def.router) {
+    app.use(`/api/modules/${id}`, def.router);
+    console.log(`[modules] routes mounted: /api/modules/${id}`);
+  }
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
-// Real-time check results pushed to connected browsers
-app.get('/api/events', sseHandler);
-
-// Monitor CRUD + manual trigger
-app.use('/api/monitors', monitorsRouter);
-
-// Alert channel configuration
-app.use('/api/settings', settingsRouter);
-
-// Alert history + dismiss
-app.use('/api/alerts', alertsRouter);
+app.get('/api/events',          sseHandler);
+app.use('/api/monitors',        monitorsRouter);
+app.use('/api/settings',        settingsRouter);
+app.use('/api/alerts',          alertsRouter);
+app.use('/api/module-instances', moduleInstancesRouter);
 
 // Fallback: let the React router handle all non-API paths
 app.get('*', (_req, res) => {
@@ -40,5 +47,5 @@ app.get('*', (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`[watchtower] server listening on http://localhost:${PORT}`);
-  initScheduler(); // restore persisted monitors and begin polling
+  initScheduler();
 });
