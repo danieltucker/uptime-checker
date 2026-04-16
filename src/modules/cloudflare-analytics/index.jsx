@@ -128,4 +128,28 @@ export default {
   description: 'Track requests, pageviews, unique visitors, and bandwidth for a Cloudflare zone.',
   minSize:     { cols: 1, rows: 1 },
   Card:        CloudflareAnalyticsCard,
+
+  // Global credential fields — one API token covers all zones
+  settingsSchema: [
+    {
+      key:         'api_token',
+      label:       'API Token',
+      type:        'password',
+      required:    true,
+      placeholder: 'your-cloudflare-api-token',
+      hint:        'Create a token in the Cloudflare dashboard (My Profile > API Tokens) with Analytics:Read permission scoped to the zones you want to monitor.',
+    },
+  ],
+
+  // Per-instance config — one card per Cloudflare zone
+  instanceConfigSchema: [
+    {
+      key:         'zoneId',
+      label:       'Zone ID',
+      type:        'text',
+      required:    true,
+      placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      hint:        'Found on the Overview page of your domain in the Cloudflare dashboard, in the right-hand sidebar.',
+    },
+  ],
 };

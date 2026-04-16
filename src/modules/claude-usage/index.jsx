@@ -120,4 +120,19 @@ export default {
   description: 'Track Anthropic API token usage across models for the current billing period.',
   minSize:     { cols: 1, rows: 1 },
   Card:        ClaudeUsageCard,
+
+  // Global credential fields — configured once in Settings > Modules
+  settingsSchema: [
+    {
+      key:         'api_key',
+      label:       'Admin API Key',
+      type:        'password',
+      required:    true,
+      placeholder: 'sk-ant-admin01-...',
+      hint:        'Requires an Admin API key from console.anthropic.com > Settings > API Keys. Standard inference keys do not have usage read access.',
+    },
+  ],
+
+  // Per-instance config — filled in when adding a dashboard card
+  instanceConfigSchema: [],
 };

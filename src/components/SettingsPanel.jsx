@@ -638,6 +638,11 @@ function ModuleSection({ mod, localValues, instances, saving, saved, onSave, onA
   const [fields, setFields] = useState({ ...localValues });
   const [showPass, setShowPass] = useState({});
 
+  // Sync when async-loaded settings arrive after initial render
+  useEffect(() => {
+    setFields({ ...localValues });
+  }, [JSON.stringify(localValues)]);
+
   const setField    = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
   const toggleShow  = (k)    => setShowPass(prev => ({ ...prev, [k]: !prev[k] }));
 
