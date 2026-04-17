@@ -437,6 +437,27 @@ A plugin architecture that extends WatchTower beyond uptime monitoring. Modules 
 
 - Renamed from "Sparkline Y-axis scale" to "Chart scale" with a simpler description
 
+### v4.5.0
+
+#### Module add flow
+
+- **Add** button (renamed from "Add Monitor") now opens a tabbed modal with **Monitor** and **Module** tabs
+- Module tab lists all installed modules with name, description, and an "Add card" button — no longer requires navigating to Settings
+- Clicking "Add card" closes the picker and opens the module instance form directly
+- Edit monitor flow is unchanged (tab bar is hidden when editing)
+
+#### Settings > Modules tab
+
+- Simplified to credentials only — API keys and module-specific settings per module
+- Instance management (add/remove cards) moved to the main Add flow
+- Version label updated to v4.5
+
+#### Bug fixes
+
+- Fixed "Unknown module" error when adding a module instance — server registry now uses `pathToFileURL` for reliable dynamic imports on Windows
+- Fixed incorrect Anthropic usage API endpoint (`/v1/usage` → `/v1/organizations/usage_report/messages`) and updated token field names to match the reporting API response
+- All `alert()` popup errors replaced with in-page error display (module instance form footer, monitor form footer, page-level toast for delete failures)
+
 ---
 
 ## Roadmap

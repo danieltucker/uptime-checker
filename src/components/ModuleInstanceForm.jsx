@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader, CheckCircle } from 'lucide-react';
+import { X, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 
 // Shown when adding or editing a module instance (card).
 // moduleDef — the frontend module definition (id, name, instanceConfigSchema)
 // instance  — existing instance when editing, null when adding
-export function ModuleInstanceForm({ moduleDef, instance, onSubmit, onCancel, submitting }) {
+export function ModuleInstanceForm({ moduleDef, instance, onSubmit, onCancel, submitting, error = '' }) {
   const { t, isDark } = useTheme();
 
   const [label,       setLabel]       = useState(instance?.label       ?? '');
@@ -135,8 +135,15 @@ export function ModuleInstanceForm({ moduleDef, instance, onSubmit, onCancel, su
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t"
+          <div className="flex flex-col gap-2 px-6 py-4 border-t"
             style={{ borderColor: t.cardBorder }}>
+            {error && (
+              <div className="flex items-start gap-2 text-xs font-mono text-red-400">
+                <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{error}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-3">
             <button type="button" onClick={onCancel}
               className="px-4 py-2 text-xs font-mono rounded-lg border transition-colors"
               style={{ borderColor: t.cardBorder, color: t.textMuted, backgroundColor: 'transparent' }}>
@@ -153,6 +160,7 @@ export function ModuleInstanceForm({ moduleDef, instance, onSubmit, onCancel, su
                 ? <><Loader size={12} className="animate-spin" /> Saving…</>
                 : instance ? 'Save changes' : 'Add to dashboard'}
             </button>
+            </div>
           </div>
         </form>
       </div>

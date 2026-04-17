@@ -1,6 +1,6 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join, dirname }         from 'node:path';
-import { fileURLToPath }         from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -16,7 +16,7 @@ export async function loadModules() {
     const modulePath = join(__dirname, entry);
     try {
       if (!statSync(modulePath).isDirectory()) continue;
-      const mod = await import(`${modulePath}/index.js`);
+      const mod = await import(pathToFileURL(join(modulePath, 'index.js')).href);
       const def = mod.default;
       if (!def?.id) continue;
       registry.set(def.id, def);

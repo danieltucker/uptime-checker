@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Plus, Save, Loader, Tag } from 'lucide-react';
+import { X, Plus, Save, Loader, Tag, AlertCircle } from 'lucide-react';
 import { INTERVAL_OPTIONS, ALERT_TYPES, CHECK_TYPES } from '../types/monitor';
 import { useTheme } from '../hooks/useTheme';
 
@@ -56,8 +56,9 @@ const DEFAULT_FORM = {
   tagInput:         '',
 };
 
-export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = false, allTags = [] }) {
+export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = false, allTags = [], error = '', availableModules = [], onAddModule }) {
   const { t } = useTheme();
+  const [activeTab,  setActiveTab]  = useState('monitor');
   const [form,       setForm]       = useState(DEFAULT_FORM);
   const [settings,   setSettings]   = useState({});
   const [formError,  setFormError]  = useState('');
@@ -297,7 +298,7 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
           style={{ borderColor: t.metricGap }}>
           <h2 className="text-xs font-mono font-bold uppercase tracking-widest"
             style={{ color: t.textSecondary }}>
-            {isEditing ? '// Edit Monitor' : '// New Monitor'}
+            {isEditing ? '// Edit Monitor' : '// Add'}
           </h2>
           <button onClick={onCancel} disabled={submitting}
             className="p-1.5 rounded transition-colors disabled:opacity-40"
@@ -306,10 +307,68 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
           </button>
         </div>
 
+        {/* Tab bar — only show when not editing */}
+        {!isEditing && availableModules.length > 0 && (
+          <div className="flex gap-0 border-b shrink-0" style={{ borderColor: t.metricGap }}>
+            {[{ id: 'monitor', label: 'Monitor' }, { id: 'module', label: 'Module' }].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className="px-5 py-2.5 text-xs font-mono font-semibold transition-colors border-b-2 -mb-px"
+                style={{
+                  color:          activeTab === tab.id ? '#60a5fa' : t.textMuted,
+                  borderColor:    activeTab === tab.id ? '#60a5fa' : 'transparent',
+                  backgroundColor: 'transparent',
+                }}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
 
-          {/* Scrollable fields area */}
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {/* Module picker — shown when module tab is active */}
+          {activeTab === 'module' && (
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
+              {availableModules.map(mod => {
+                const Icon = mod.icon;
+                return (
+                  <div key={mod.id}
+                    className="flex items-center justify-between gap-4 rounded-xl border px-4 py-3.5"
+                    style={{ borderColor: t.cardBorder, backgroundColor: t.inputBg }}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      {Icon && <Icon size={18} style={{ color: t.textMuted, flexShrink: 0 }} />}
+                      <div className="min-w-0">
+                        <div className="text-sm font-mono font-semibold" style={{ color: t.textPrimary }}>
+                          {mod.name}
+                        </div>
+                        <div className="text-xs font-mono mt-0.5 leading-relaxed truncate"
+                          style={{ color: t.textMuted }}>
+                          {mod.description}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onAddModule?.(mod.id)}
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all"
+                      style={{
+                        background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                        color:      '#fff',
+                        boxShadow:  '0 2px 8px rgba(59,130,246,0.35)',
+                      }}>
+                      <Plus size={11} /> Add card
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Monitor form fields — shown when monitor tab is active */}
+          <div className={`flex-1 overflow-y-auto px-6 py-5 space-y-4 ${activeTab !== 'monitor' ? 'hidden' : ''}`}>
 
           {/* Check type */}
           <Field label="Check Type" t={t}>
@@ -710,22 +769,32 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
           </div>{/* end scrollable fields */}
 
           {/* Actions — fixed footer */}
-          <div className="flex justify-end items-center gap-3 px-6 py-4 border-t shrink-0"
+          <div className="flex flex-col gap-2 px-6 py-4 border-t shrink-0"
             style={{ borderColor: t.metricGap }}>
+            {error && activeTab === 'monitor' && (
+              <div className="flex items-start gap-2 text-xs font-mono text-red-400">
+                <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{error}</span>
+              </div>
+            )}
+            <div className="flex justify-end items-center gap-3">
             <button type="button" onClick={onCancel} disabled={submitting}
               className="px-4 py-2 text-xs font-mono transition-colors disabled:opacity-40"
               style={{ color: t.textMuted }}>
               Cancel
             </button>
-            <button type="submit" disabled={submitting}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-mono font-bold rounded transition-colors">
-              {submitting
-                ? <><Loader size={13} className="animate-spin" /> Saving…</>
-                : isEditing
-                  ? <><Save size={13} /> Save Changes</>
-                  : <><Plus size={13} /> Add Monitor</>
-              }
-            </button>
+            {activeTab === 'monitor' && (
+              <button type="submit" disabled={submitting}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-mono font-bold rounded transition-colors">
+                {submitting
+                  ? <><Loader size={13} className="animate-spin" /> Saving…</>
+                  : isEditing
+                    ? <><Save size={13} /> Save Changes</>
+                    : <><Plus size={13} /> Add Monitor</>
+                }
+              </button>
+            )}
+            </div>
           </div>
         </form>
       </div>

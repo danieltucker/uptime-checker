@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code } from 'lucide-react';
+import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code, X } from 'lucide-react';
 import {
   DndContext, closestCenter,
   KeyboardSensor, PointerSensor,
@@ -97,6 +97,11 @@ export default function App() {
   const [showForm,       setShowForm]       = useState(false);
   const [editingMonitor, setEditingMonitor] = useState(null);
   const [submitting,     setSubmitting]     = useState(false);
+  const [formError,      setFormError]      = useState('');
+  const [pageError,      setPageError]      = useState('');
+  const [addingFor,      setAddingFor]      = useState(null); // moduleId for new instance form
+  const [instanceSubmitting, setInstanceSubmitting] = useState(false);
+  const [instanceError,  setInstanceError]  = useState('');
   const [tagFilter,      setTagFilter]      = useState([]);
   const [showAlerts,     setShowAlerts]     = useState(false);
   const [sortBy,         setSortBy]         = useState('default');
@@ -194,18 +199,38 @@ export default function App() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const openAdd  = () => { setEditingMonitor(null); setShowForm(true); };
-  const openEdit = (m) => { setEditingMonitor(m);   setShowForm(true); };
-  const closeForm = () => { setShowForm(false); setEditingMonitor(null); };
+  const openAdd  = () => { setEditingMonitor(null); setFormError(''); setShowForm(true); };
+  const openEdit = (m) => { setEditingMonitor(m);   setFormError(''); setShowForm(true); };
+  const closeForm = () => { setShowForm(false); setEditingMonitor(null); setFormError(''); };
+
+  const handleAddModule = (moduleId) => {
+    closeForm();
+    setInstanceError('');
+    setAddingFor(moduleId);
+  };
+
+  const handleAddInstance = async (payload) => {
+    setInstanceSubmitting(true);
+    setInstanceError('');
+    try {
+      await addInstance(payload);
+      setAddingFor(null);
+    } catch (err) {
+      setInstanceError(err.message);
+    } finally {
+      setInstanceSubmitting(false);
+    }
+  };
 
   const handleFormSubmit = async (data) => {
     setSubmitting(true);
+    setFormError('');
     try {
       editingMonitor ? await updateMonitor(editingMonitor.id, data) : await addMonitor(data);
       closeForm();
     } catch (err) {
       console.error('[watchtower] save failed:', err);
-      alert(`Failed to save monitor: ${err.message}`);
+      setFormError(`Failed to save monitor: ${err.message}`);
     } finally {
       setSubmitting(false);
     }
@@ -214,7 +239,11 @@ export default function App() {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this monitor? This cannot be undone.')) return;
     try { await deleteMonitor(id); }
-    catch (err) { console.error('[watchtower] delete failed:', err); alert(`Failed to delete: ${err.message}`); }
+    catch (err) {
+      console.error('[watchtower] delete failed:', err);
+      setPageError(`Failed to delete monitor: ${err.message}`);
+      setTimeout(() => setPageError(''), 6000);
+    }
   };
 
   const toggleTag = (tag) =>
@@ -224,6 +253,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: t.pageBg, color: t.textPrimary }}>
+
+      {/* ── Page-level error toast ───────────────────────────────────────────── */}
+      {pageError && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-4 py-3 rounded-xl border text-xs font-mono text-red-400 shadow-lg"
+          style={{ backgroundColor: '#1e0a0a', borderColor: '#7f1d1d', maxWidth: '480px' }}>
+          <AlertTriangle size={13} className="shrink-0" />
+          <span className="flex-1">{pageError}</span>
+          <button onClick={() => setPageError('')} className="opacity-60 hover:opacity-100 ml-1">
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       {/* ── Top nav ─────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b"
@@ -238,7 +279,7 @@ export default function App() {
             </span>
             <span className="hidden sm:inline text-xs font-mono px-2 py-0.5 rounded border"
               style={{ color: t.textFaint, borderColor: t.cardBorder }}>
-              uptime monitor · v4.4
+              uptime monitor · v4.5
             </span>
           </div>
 
@@ -320,11 +361,11 @@ export default function App() {
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
-            {/* Add monitor */}
+            {/* Add monitor / module */}
             <button onClick={openAdd}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-bold rounded transition-colors">
               <Plus size={14} />
-              Add Monitor
+              Add
             </button>
           </div>
         </div>
@@ -472,6 +513,9 @@ export default function App() {
           onCancel={closeForm}
           submitting={submitting}
           allTags={allTags}
+          error={formError}
+          availableModules={[...moduleRegistry.values()]}
+          onAddModule={handleAddModule}
         />
       )}
 
@@ -482,9 +526,17 @@ export default function App() {
           onViewModeChange={handleViewModeChange}
           chartYMax={chartYMax}
           onChartYMaxChange={handleChartYMaxChange}
-          moduleInstances={instances}
-          onAddInstance={addInstance}
-          onDeleteInstance={deleteInstance}
+        />
+      )}
+
+      {addingFor && (
+        <ModuleInstanceForm
+          moduleDef={moduleRegistry.get(addingFor)}
+          instance={null}
+          onSubmit={handleAddInstance}
+          onCancel={() => { setAddingFor(null); setInstanceError(''); }}
+          submitting={instanceSubmitting}
+          error={instanceError}
         />
       )}
 

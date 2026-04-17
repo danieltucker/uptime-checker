@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, Plus, Trash2, ExternalLink } from 'lucide-react';
+import { X, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
-import { ModuleInstanceForm } from './ModuleInstanceForm.jsx';
 
 const DEFAULT_SETTINGS = {
   telegram_enabled: '', telegram_token: '', telegram_chat_id: '',
@@ -34,15 +33,13 @@ const CHANNEL_VALIDATION = [
 
 // ── SettingsPanel ─────────────────────────────────────────────────────────────
 
-export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange, moduleInstances = [], onAddInstance, onDeleteInstance }) {
+export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange }) {
   const { t, isDark } = useTheme();
   const [activeTab,     setActiveTab]     = useState('general');
   const [settings,      setSettings]      = useState(DEFAULT_SETTINGS);
   const [moduleSettings, setModuleSettings] = useState({});  // module.* keys
   const [moduleSaving,   setModuleSaving]   = useState({});  // moduleId → bool
   const [moduleSaved,    setModuleSaved]    = useState({});  // moduleId → bool
-  const [addingFor,      setAddingFor]      = useState(null); // moduleId for new instance form
-  const [instanceSubmitting, setInstanceSubmitting] = useState(false);
   const [saving,        setSaving]        = useState(false);
   const [saved,         setSaved]         = useState(false);
   const [saveError,     setSaveError]     = useState('');
@@ -86,18 +83,6 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
       console.error('[modules] save failed:', err);
     } finally {
       setModuleSaving(p => ({ ...p, [moduleId]: false }));
-    }
-  };
-
-  const handleAddInstance = async (payload) => {
-    setInstanceSubmitting(true);
-    try {
-      await onAddInstance?.(payload);
-      setAddingFor(null);
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setInstanceSubmitting(false);
     }
   };
 
@@ -304,9 +289,6 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
                 onSaveModuleSettings={saveModuleSettings}
                 moduleSaving={moduleSaving}
                 moduleSaved={moduleSaved}
-                moduleInstances={moduleInstances}
-                onAddClick={setAddingFor}
-                onDeleteInstance={onDeleteInstance}
                 t={t}
                 isDark={isDark}
               />
@@ -360,16 +342,6 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
         </div>
       </div>
 
-      {/* Module instance add form — rendered outside the modal so it stacks on top */}
-      {addingFor && (
-        <ModuleInstanceForm
-          moduleDef={moduleRegistry.get(addingFor)}
-          instance={null}
-          onSubmit={handleAddInstance}
-          onCancel={() => setAddingFor(null)}
-          submitting={instanceSubmitting}
-        />
-      )}
     </div>
   );
 }
@@ -573,7 +545,7 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
 
 // ── Modules tab ───────────────────────────────────────────────────────────────
 
-function ModulesTab({ moduleSettings, onSaveModuleSettings, moduleSaving, moduleSaved, moduleInstances, onAddClick, onDeleteInstance, t, isDark }) {
+function ModulesTab({ moduleSettings, onSaveModuleSettings, moduleSaving, moduleSaved, t, isDark }) {
   const mods = [...moduleRegistry.values()];
 
   if (mods.length === 0) {
@@ -587,7 +559,6 @@ function ModulesTab({ moduleSettings, onSaveModuleSettings, moduleSaving, module
   return (
     <div className="space-y-6">
       {mods.map(mod => {
-        const instances   = moduleInstances.filter(i => i.moduleId === mod.id);
         const localValues = {};
         for (const field of mod.settingsSchema ?? []) {
           localValues[field.key] = moduleSettings[`module.${mod.id}.${field.key}`] ?? '';
@@ -598,12 +569,9 @@ function ModulesTab({ moduleSettings, onSaveModuleSettings, moduleSaving, module
             key={mod.id}
             mod={mod}
             localValues={localValues}
-            instances={instances}
             saving={!!moduleSaving[mod.id]}
             saved={!!moduleSaved[mod.id]}
             onSave={fields => onSaveModuleSettings(mod.id, fields)}
-            onAddClick={() => onAddClick(mod.id)}
-            onDeleteInstance={onDeleteInstance}
             t={t}
             isDark={isDark}
           />
@@ -634,7 +602,7 @@ function ModulesTab({ moduleSettings, onSaveModuleSettings, moduleSaving, module
   );
 }
 
-function ModuleSection({ mod, localValues, instances, saving, saved, onSave, onAddClick, onDeleteInstance, t, isDark }) {
+function ModuleSection({ mod, localValues, saving, saved, onSave, t, isDark }) {
   const [fields, setFields] = useState({ ...localValues });
   const [showPass, setShowPass] = useState({});
 
@@ -670,6 +638,11 @@ function ModuleSection({ mod, localValues, instances, saving, saved, onSave, onA
       </div>
 
       <div className="px-5 py-4 space-y-4">
+        {mod.settingsSchema?.length === 0 && (
+          <p className="text-xs font-mono" style={{ color: t.textFaint }}>
+            No credentials required. Use <strong>Add</strong> on the dashboard to place cards.
+          </p>
+        )}
         {/* Credential fields */}
         {mod.settingsSchema?.length > 0 && (
           <div className="space-y-3">
@@ -731,50 +704,6 @@ function ModuleSection({ mod, localValues, instances, saving, saved, onSave, onA
           </div>
         )}
 
-        {/* Instances */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-mono uppercase tracking-wider" style={{ color: t.textMuted }}>
-              Dashboard cards ({instances.length})
-            </div>
-            <button
-              onClick={onAddClick}
-              className="flex items-center gap-1 text-xs font-mono px-2.5 py-1 rounded-lg border transition-colors"
-              style={{ borderColor: t.cardBorder, color: t.textSecondary, backgroundColor: t.tagBg }}>
-              <Plus size={11} /> Add card
-            </button>
-          </div>
-          {instances.length === 0 ? (
-            <p className="text-xs font-mono" style={{ color: t.textFaint }}>
-              No cards added yet. Click "Add card" to place one on the dashboard.
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {instances.map(inst => (
-                <div key={inst.id}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg border"
-                  style={{ borderColor: t.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}>
-                  <div>
-                    <span className="text-xs font-mono font-semibold" style={{ color: t.textPrimary }}>
-                      {inst.label}
-                    </span>
-                    {inst.tags?.length > 0 && (
-                      <span className="ml-2 text-xs font-mono" style={{ color: t.textFaint }}>
-                        {inst.tags.join(', ')}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => onDeleteInstance?.(inst.id)}
-                    className="p-1 rounded opacity-40 hover:opacity-100 transition-opacity"
-                    style={{ color: t.textSecondary }}>
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
