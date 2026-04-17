@@ -10,15 +10,16 @@ import { useTheme } from '../hooks/useTheme';
 // ---------------------------------------------------------------------------
 
 const STATUS_STYLES = {
-  up:      { label: 'UP',      cls: 'text-green-400 bg-green-400/10 border-green-400/30' },
-  down:    { label: 'DOWN',    cls: 'text-red-400   bg-red-400/10   border-red-400/30   animate-pulse' },
-  pending: { label: 'PENDING', cls: 'text-amber-400 bg-amber-400/10 border-amber-400/30' },
+  up:      { label: 'UP',      cls: 'text-green-400 bg-green-400/10 border-green-400/30', dot: false },
+  down:    { label: 'DOWN',    cls: 'text-red-400   bg-red-400/10   border-red-400/30',   dot: true  },
+  pending: { label: 'PENDING', cls: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dot: false },
 };
 
 function StatusBadge({ status }) {
-  const { label, cls } = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
+  const { label, cls, dot } = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-mono font-bold tracking-widest ${cls}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-mono font-bold tracking-widest ${cls}`}>
+      {dot && <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />}
       {label}
     </span>
   );
@@ -215,7 +216,7 @@ function CheckTypeBadge({ checkType }) {
 // MonitorCard
 // ---------------------------------------------------------------------------
 
-export function MonitorCard({
+function MonitorCardInner({
   monitor, onEdit, onDelete, onEmbed, compact = false,
   // Drag-and-drop props (optional — only passed when dragging is enabled)
   dragHandleProps, isDragging = false,
@@ -535,6 +536,16 @@ export function MonitorCard({
     </div>
   );
 }
+
+// Only re-render when the monitor data itself changes (SSE updates preserve
+// object identity for unchanged monitors), or when display-affecting props change.
+export const MonitorCard = React.memo(MonitorCardInner, (prev, next) =>
+  prev.monitor    === next.monitor    &&
+  prev.chartYMax  === next.chartYMax  &&
+  prev.width      === next.width      &&
+  prev.isDragging === next.isDragging &&
+  prev.compact    === next.compact
+);
 
 // ---------------------------------------------------------------------------
 // Metric cell

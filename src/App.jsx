@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code, X } from 'lucide-react';
 import {
   DndContext, closestCenter,
@@ -200,7 +200,7 @@ export default function App() {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const openAdd  = () => { setEditingMonitor(null); setFormError(''); setShowForm(true); };
-  const openEdit = (m) => { setEditingMonitor(m);   setFormError(''); setShowForm(true); };
+  const openEdit = useCallback((m) => { setEditingMonitor(m); setFormError(''); setShowForm(true); }, []);
   const closeForm = () => { setShowForm(false); setEditingMonitor(null); setFormError(''); };
 
   const handleAddModule = (moduleId) => {
@@ -236,7 +236,7 @@ export default function App() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = useCallback(async (id) => {
     if (!window.confirm('Delete this monitor? This cannot be undone.')) return;
     try { await deleteMonitor(id); }
     catch (err) {
@@ -244,7 +244,7 @@ export default function App() {
       setPageError(`Failed to delete monitor: ${err.message}`);
       setTimeout(() => setPageError(''), 6000);
     }
-  };
+  }, [deleteMonitor]);
 
   const toggleTag = (tag) =>
     setTagFilter(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);

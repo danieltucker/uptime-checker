@@ -3,7 +3,7 @@ import { Pencil, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
 
-export function ModuleCard({ instance, onEdit, onDelete }) {
+function ModuleCardInner({ instance, onEdit, onDelete }) {
   const { t, isDark } = useTheme();
   const { moduleId, label, tags = [], interval = 3600 } = instance;
   const moduleDef = moduleRegistry.get(moduleId);
@@ -163,3 +163,8 @@ export function ModuleCard({ instance, onEdit, onDelete }) {
     </div>
   );
 }
+
+// Re-render only when the instance record itself changes (label, config, tags, etc.)
+export const ModuleCard = React.memo(ModuleCardInner, (prev, next) =>
+  prev.instance === next.instance
+);
