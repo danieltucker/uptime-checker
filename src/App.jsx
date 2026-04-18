@@ -295,34 +295,6 @@ export default function App() {
               <span className="text-xs font-mono" style={{ color: t.textFaint }}>live</span>
             </div>
 
-            {/* History window selector — desktop only */}
-            <div className="hidden sm:flex items-center gap-1.5">
-              <span className="text-xs font-mono" style={{ color: t.textMuted }}>Window</span>
-              <select
-                value={historyWindow}
-                onChange={e => setHistoryWindow(e.target.value)}
-                className="text-xs font-mono rounded border px-1.5 py-0.5 appearance-none cursor-pointer focus:outline-none"
-                style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
-                {HISTORY_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Sort selector — desktop only */}
-            <div className="hidden sm:flex items-center gap-1.5">
-              <span className="text-xs font-mono" style={{ color: t.textMuted }}>Sort</span>
-              <select
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value)}
-                className="text-xs font-mono rounded border px-1.5 py-0.5 appearance-none cursor-pointer focus:outline-none"
-                style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
-                {SORT_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-
             {/* Desktop icon buttons */}
             <div className="hidden sm:flex items-center gap-3">
               {/* Alerts bell */}
@@ -402,34 +374,6 @@ export default function App() {
           <div className="sm:hidden border-t px-4 py-3 space-y-3"
             style={{ borderColor: t.cardBorder, backgroundColor: t.headerBg }}>
 
-            {/* Window + Sort selectors */}
-            <div className="flex gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-mono" style={{ color: t.textMuted }}>Window</span>
-                <select
-                  value={historyWindow}
-                  onChange={e => setHistoryWindow(e.target.value)}
-                  className="text-xs font-mono rounded border px-1.5 py-1 appearance-none cursor-pointer focus:outline-none"
-                  style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
-                  {HISTORY_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-mono" style={{ color: t.textMuted }}>Sort</span>
-                <select
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value)}
-                  className="text-xs font-mono rounded border px-1.5 py-1 appearance-none cursor-pointer focus:outline-none"
-                  style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
-                  {SORT_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
             {/* Action buttons row */}
             <div className="flex items-center gap-2">
               <button onClick={() => { setEmbedMonitor(undefined); setMobileMenuOpen(false); }}
@@ -487,33 +431,64 @@ export default function App() {
         {!loading && !error && (
           <>
 
-            {/* Tag filter row */}
-            {allTags.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono uppercase tracking-wider"
-                  style={{ color: t.textMuted }}>
-                  Filter
-                </span>
-                {allTags.map(tag => (
-                  <button key={tag} onClick={() => toggleTag(tag)}
-                    className="flex items-center gap-0.5 text-xs font-mono px-2 py-0.5 rounded border transition-colors"
-                    style={tagFilter.includes(tag)
-                      ? { color: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.15)', borderColor: 'rgba(96,165,250,0.4)' }
-                      : { color: t.textMuted, backgroundColor: t.tagBg, borderColor: t.tagBorder }
-                    }>
-                    <TagIcon size={9} />
-                    {tag}
-                  </button>
-                ))}
-                {tagFilter.length > 0 && (
-                  <button onClick={() => setTagFilter([])}
-                    className="text-xs font-mono transition-opacity opacity-50 hover:opacity-100"
-                    style={{ color: t.textSecondary }}>
-                    clear
-                  </button>
-                )}
+            {/* Tag filter + view controls row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {allTags.length > 0 && (
+                <>
+                  <span className="text-xs font-mono uppercase tracking-wider"
+                    style={{ color: t.textMuted }}>
+                    Filter
+                  </span>
+                  {allTags.map(tag => (
+                    <button key={tag} onClick={() => toggleTag(tag)}
+                      className="flex items-center gap-0.5 text-xs font-mono px-2 py-0.5 rounded border transition-colors"
+                      style={tagFilter.includes(tag)
+                        ? { color: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.15)', borderColor: 'rgba(96,165,250,0.4)' }
+                        : { color: t.textMuted, backgroundColor: t.tagBg, borderColor: t.tagBorder }
+                      }>
+                      <TagIcon size={9} />
+                      {tag}
+                    </button>
+                  ))}
+                  {tagFilter.length > 0 && (
+                    <button onClick={() => setTagFilter([])}
+                      className="text-xs font-mono transition-opacity opacity-50 hover:opacity-100"
+                      style={{ color: t.textSecondary }}>
+                      clear
+                    </button>
+                  )}
+                  <div className="w-px h-3 mx-1 shrink-0" style={{ backgroundColor: t.cardBorder }} />
+                </>
+              )}
+
+              {/* Window + Sort — always visible, unobtrusive */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-mono" style={{ color: t.textFaint }}>Window</span>
+                  <select
+                    value={historyWindow}
+                    onChange={e => setHistoryWindow(e.target.value)}
+                    className="text-xs font-mono rounded border px-1.5 py-0.5 appearance-none cursor-pointer focus:outline-none"
+                    style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
+                    {HISTORY_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-mono" style={{ color: t.textFaint }}>Sort</span>
+                  <select
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value)}
+                    className="text-xs font-mono rounded border px-1.5 py-0.5 appearance-none cursor-pointer focus:outline-none"
+                    style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
+                    {SORT_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            )}
+            </div>
 
             {/* Monitor grid */}
             {userMonitors.length === 0 ? (

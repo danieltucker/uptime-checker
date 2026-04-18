@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink } from 'lucide-react';
+import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
 
@@ -35,7 +35,8 @@ const CHANNEL_VALIDATION = [
 
 export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange }) {
   const { t, isDark } = useTheme();
-  const [activeTab,     setActiveTab]     = useState('general');
+  const [activeTab,        setActiveTab]        = useState('general');
+  const [mobileContentOpen, setMobileContentOpen] = useState(false);
   const [settings,      setSettings]      = useState(DEFAULT_SETTINGS);
   const [moduleSettings, setModuleSettings] = useState({});  // module.* keys
   const [moduleSaving,   setModuleSaving]   = useState({});  // moduleId → bool
@@ -161,39 +162,55 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
   const inputCls   = 'w-full rounded-lg border px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/60 transition-all';
   const inputStyle = { backgroundColor: t.inputBg, color: t.textPrimary, borderColor: t.cardBorder };
 
-  // Subtle gradient overlay for the sidebar
-  const sidebarBg = isDark
-    ? 'linear-gradient(180deg, #1a2130 0%, #161b22 100%)'
-    : 'linear-gradient(180deg, #f0f3f7 0%, #eaeef2 100%)';
+  const sidebarBg = isDark ? '#12171e' : '#f0f3f6';
+
+  const activeTabDef = TABS.find(tab => tab.id === activeTab);
+  const contentSubtitle =
+    activeTab === 'general'       ? 'Dashboard-wide display preferences'  :
+    activeTab === 'notifications' ? 'Configure alert delivery channels'   :
+                                    'Install modules and manage credentials';
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
 
-      {/* Modal */}
+      {/* Modal — full screen on mobile, floating panel on desktop */}
       <div
-        className="flex rounded-2xl border shadow-2xl overflow-hidden"
+        className="flex w-full h-full sm:rounded-2xl sm:border sm:shadow-2xl overflow-hidden sm:w-full sm:max-w-[760px] sm:h-[680px] sm:max-h-[calc(100vh-2rem)]"
         style={{
-          backgroundColor: t.cardBg,
+          backgroundColor: sidebarBg,
           borderColor:     t.cardBorder,
-          width:           '100%',
-          maxWidth:        '760px',
-          height:          '680px',
-          maxHeight:       'calc(100vh - 2rem)',
           boxShadow: isDark
             ? '0 25px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)'
             : '0 25px 80px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)',
         }}>
 
-        {/* ── Left sidebar ─────────────────────────────────────────────────── */}
+        {/* ── Sidebar — full width on mobile (tab list view), fixed 200px on desktop ── */}
         <aside
-          className="flex flex-col shrink-0"
-          style={{ width: 200, background: sidebarBg, borderRight: `1px solid ${t.cardBorder}` }}>
+          className={`${mobileContentOpen ? 'hidden sm:flex' : 'flex'} flex-col w-full sm:w-[200px] shrink-0`}
+          style={{ background: sidebarBg, borderRight: `1px solid ${t.cardBorder}` }}>
 
-          {/* Brand / title */}
-          <div className="px-5 pt-6 pb-4">
+          {/* Mobile header: title + close button */}
+          <div className="flex items-center justify-between px-5 pt-6 pb-3 sm:hidden">
+            <div className="flex items-center gap-2.5">
+              <Settings2 size={15} style={{ color: '#60a5fa' }} />
+              <span className="text-sm font-mono font-bold uppercase tracking-[0.15em]"
+                style={{ color: t.textSecondary }}>
+                Settings
+              </span>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-mono font-medium transition-colors"
+              style={{ color: t.textMuted, borderColor: t.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}>
+              <X size={14} /> Close
+            </button>
+          </div>
+
+          {/* Desktop header: brand only */}
+          <div className="hidden sm:block px-5 pt-6 pb-4">
             <div className="flex items-center gap-2.5 mb-1">
               <Settings2 size={14} style={{ color: '#60a5fa' }} />
               <span className="text-xs font-mono font-bold uppercase tracking-[0.15em]"
@@ -204,75 +221,81 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
             <div className="h-px mt-3" style={{ backgroundColor: t.cardBorder }} />
           </div>
 
+          {/* Divider below mobile header */}
+          <div className="sm:hidden mx-5 mb-2 h-px" style={{ backgroundColor: t.cardBorder }} />
+
           {/* Tab list */}
-          <nav className="flex-1 px-3 space-y-0.5">
+          <nav className="flex-1 px-3 space-y-0.5 py-1">
             {TABS.map(({ id, label, Icon }) => {
               const isActive = activeTab === id;
               return (
                 <button
                   key={id}
-                  onClick={() => setActiveTab(id)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-mono transition-all text-left"
+                  onClick={() => { setActiveTab(id); setMobileContentOpen(true); }}
+                  className="w-full flex items-center gap-3 px-3 py-3.5 sm:py-2.5 rounded-lg text-sm font-mono transition-all text-left"
                   style={{
                     color:           isActive ? '#60a5fa' : t.textMuted,
                     backgroundColor: isActive
                       ? isDark ? 'rgba(96,165,250,0.12)' : 'rgba(59,130,246,0.08)'
                       : 'transparent',
-                    fontWeight:  isActive ? 600 : 400,
-                    borderLeft:  isActive ? '2px solid #60a5fa' : '2px solid transparent',
+                    fontWeight: isActive ? 600 : 400,
+                    borderLeft: isActive ? '2px solid #60a5fa' : '2px solid transparent',
                   }}>
-                  <Icon size={14} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.6 }} />
+                  <Icon size={15} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.6 }} />
                   {label}
                 </button>
               );
             })}
           </nav>
 
-          {/* Bottom decoration */}
-          <div className="px-5 py-5">
+          {/* Version label — desktop only */}
+          <div className="hidden sm:block px-5 py-5">
             <div className="text-xs font-mono" style={{ color: t.textFaint }}>
-              WatchTower v4.4
+              WatchTower v4.5
             </div>
           </div>
         </aside>
 
-        {/* ── Right content ─────────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* ── Content panel — hidden on mobile until a tab is selected ── */}
+        <div className={`${mobileContentOpen ? 'flex' : 'hidden sm:flex'} flex-1 flex-col min-w-0`}>
 
           {/* Content header */}
-          <div className="flex items-center justify-between px-7 pt-6 pb-4 shrink-0">
-            <div>
+          <div className="flex items-center gap-3 px-5 sm:px-7 pt-5 sm:pt-6 pb-4 shrink-0">
+
+            {/* Back button — mobile only */}
+            <button
+              onClick={() => setMobileContentOpen(false)}
+              className="sm:hidden flex items-center gap-1 px-2 py-1.5 -ml-1 rounded-lg text-sm font-mono transition-colors"
+              style={{ color: '#60a5fa' }}>
+              <ChevronLeft size={16} />
+              Back
+            </button>
+
+            {/* Title block */}
+            <div className="flex-1 min-w-0">
               <h2 className="text-base font-semibold font-mono"
                 style={{ color: t.textPrimary }}>
-                {TABS.find(tab => tab.id === activeTab)?.label}
+                {activeTabDef?.label}
               </h2>
-              <p className="text-xs font-mono mt-0.5" style={{ color: t.textMuted }}>
-                {activeTab === 'general'       ? 'Dashboard-wide display preferences'  :
-               activeTab === 'notifications' ? 'Configure alert delivery channels'   :
-                                              'Install modules and manage credentials'}
+              <p className="text-xs font-mono mt-0.5 hidden sm:block" style={{ color: t.textMuted }}>
+                {contentSubtitle}
               </p>
             </div>
+
+            {/* Close — unified "✕ Close" pill on all screen sizes */}
             <button
               onClick={onClose}
-              className="p-2 rounded-lg transition-colors"
-              style={{ color: t.textMuted }}
-              onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-                e.currentTarget.style.color = t.textPrimary;
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = t.textMuted;
-              }}>
-              <X size={16} />
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-mono font-medium transition-colors"
+              style={{ color: t.textMuted, borderColor: t.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}>
+              <X size={14} /> Close
             </button>
           </div>
 
           {/* Divider */}
-          <div className="mx-7 mb-5 h-px" style={{ backgroundColor: t.cardBorder }} />
+          <div className="mx-5 sm:mx-7 mb-4 sm:mb-5 h-px" style={{ backgroundColor: t.cardBorder }} />
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-7 pb-4">
+          <div className="flex-1 overflow-y-auto px-5 sm:px-7 pb-4">
             {activeTab === 'general' && (
               <GeneralTab
                 viewMode={viewMode}
@@ -313,21 +336,21 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
           {/* Footer — save only on Notifications tab */}
           {activeTab === 'notifications' && (
             <div
-              className="flex items-center justify-between gap-4 px-7 py-4 border-t shrink-0"
+              className="flex items-center justify-between gap-4 px-5 sm:px-7 py-4 border-t shrink-0"
               style={{ borderColor: t.cardBorder }}>
               {saveError
                 ? <span className="flex items-center gap-1.5 text-xs font-mono text-red-400 leading-snug">
                     <AlertCircle size={13} className="shrink-0" />
                     {saveError}
                   </span>
-                : <span className="text-xs font-mono" style={{ color: t.textFaint }}>
+                : <span className="text-xs font-mono hidden sm:block" style={{ color: t.textFaint }}>
                     Enable channels per monitor in the Edit form
                   </span>
               }
               <button
                 onClick={save}
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-mono font-bold transition-all disabled:opacity-60 shrink-0"
+                className="flex items-center gap-2 px-5 py-2.5 sm:py-2 rounded-lg text-sm sm:text-xs font-mono font-bold transition-all disabled:opacity-60 shrink-0 ml-auto"
                 style={{
                   background: saved ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: '#fff',
