@@ -7,7 +7,7 @@ WatchTower makes real HTTP(S), TCP, and ICMP checks on configurable intervals, s
 Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing APIs and websites just as well as internal services like a Plex server, a NAS, a database port, or a self-hosted app behind a reverse proxy.
 
 ![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
-![Version](https://img.shields.io/badge/version-4.0-blue)
+![Version](https://img.shields.io/badge/version-4.5-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ![WatchTower dashboard](images/screenshot.png)
@@ -77,6 +77,12 @@ The bell icon in the header shows a count of active outages. Click it to expand 
 
 ![Alerts panel](images/notifications.png)
 
+### Notification Settings
+
+Configure alert channels in Settings > Notifications. Each channel can be individually enabled or disabled, tested before saving, and assigned per-monitor in the edit form.
+
+![Notification settings](images/notification-settings.png)
+
 ### Telegram Notifications
 
 DOWN, RECOVERED, and DEGRADED events are sent immediately to your configured channels. No polling interval - alerts fire the moment the check result lands.
@@ -137,6 +143,35 @@ docker compose up --build
 
 Open [http://localhost:3000](http://localhost:3000). Data is stored in a named volume (`watchtower-data`) and survives container restarts.
 
+### Building and publishing a Docker image
+
+To publish the image to Docker Hub for deployment on a remote host (e.g. TrueNAS, a home server):
+
+```bash
+docker build -t your-username/watchtower:latest .
+docker push your-username/watchtower:latest
+```
+
+**Cross-platform builds (Apple Silicon → amd64)**
+
+If you're building on an M-series Mac but deploying to an x86 machine, you need to target `linux/amd64` explicitly. Use `buildx`:
+
+```bash
+# One-time setup
+docker buildx create --name multi --use
+
+# Build for amd64 and push directly to the registry
+docker buildx build --platform linux/amd64 -t your-username/watchtower:latest --push .
+```
+
+To support both architectures (e.g. run locally on the Mac and deploy to x86):
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t your-username/watchtower:latest --push .
+```
+
+> **Note:** `buildx` cross-compiled images can't be loaded into your local Docker daemon — `--push` sends them directly to the registry.
+
 ### Local development
 
 ```bash
@@ -191,6 +226,8 @@ Requires a Twilio account and a purchased phone number (~$0.008/message). Paste 
 ## Embedding
 
 Click the `<>` icon on any monitor card for a single-monitor widget, or click `<>` in the header for the full dashboard. Both tabs show a live URL preview and copyable iframe code.
+
+![Embed modal](images/embed.png)
 
 ```html
 <!-- Single monitor widget -->
@@ -274,7 +311,7 @@ Embedded views receive live SSE updates and have no edit, delete, or settings co
 ## Project Structure
 
 ```
-uptime-checker/
+watchtower/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── index.html
@@ -306,6 +343,7 @@ uptime-checker/
         ├── checkers/
         │   ├── index.js             # Dispatcher
         │   ├── http.js              # HTTP check with timing breakdown
+        │   ├── api.js               # API check with body/JSON/auth validation
         │   ├── tcp.js               # TCP port reachability
         │   └── icmp.js              # ICMP ping (requires NET_RAW)
         └── routes/
@@ -422,6 +460,8 @@ A plugin architecture that extends WatchTower beyond uptime monitoring. Modules 
 - **Manual refresh** - each module card has a refresh button to fetch data on demand
 - **MODULES.md** - full documentation for building new modules
 
+![Modules settings](images/modules.png)
+
 #### Bundled modules
 
 **Claude API Usage** - polls the Anthropic Admin API for token usage across models for the current billing period. Requires an Admin API key from the Anthropic Console (standard inference keys do not have usage read access).
@@ -462,36 +502,7 @@ A plugin architecture that extends WatchTower beyond uptime monitoring. Modules 
 
 ## Roadmap
 
-### v4.x - Module System
-
-A plugin architecture that extends WatchTower beyond uptime monitoring. Modules render as cards in the same grid as monitors and follow the same visual language, but each module defines its own data fetching, display, and alert logic.
-
-#### Module contract
-
-Every module exposes a standard set of fields so the dashboard can render configuration forms and handle alerts consistently:
-
-| Field          | Description                                                                 |
-|----------------|-----------------------------------------------------------------------------|
-| `label`        | Display name shown in the card header                                       |
-| `description`  | Optional notes                                                              |
-| `interval`     | How often the module fetches data; module defines the allowed range         |
-| `tags`         | Freeform labels; works with the existing tag filter                         |
-| `alertTypes`   | `Email`, `SMS`, `Telegram`, `Webhook`, `Notification`, or `None`            |
-| `alertBehavior`| Module-defined thresholds that map to the standard down/degraded/recovered states, plus `Notification` for informational pushes that don't imply a failure |
-
-The `Notification` alert type is a fourth alert state available to modules for events that are worth surfacing (e.g. "usage crossed 80% of monthly quota") without implying the monitored thing is down.
-
-Module credentials are stored in the existing `settings` table under a namespaced prefix (`module.<id>.<key>`) and auto-render as a new section in the Settings panel.
-
-#### Bundled modules
-
-**Claude API Usage**
-Polls the Anthropic API for token usage and cost data. Displays current period spend, token counts by model, and a usage trend sparkline. Fires a `Notification` alert when usage crosses a configurable threshold.
-
-**Cloudflare Analytics**
-Queries the Cloudflare GraphQL Analytics API (`api.cloudflare.com/client/v4/graphql`) for a configured zone. Displays requests, pageviews, unique visitors, and bandwidth for the selected time window. Requires a Cloudflare API token with `Analytics:Read` permission and a Zone ID. Supports the same 1h/12h/1d/1w history windows as monitors.
-
-#### Tag groups
+### Tag groups
 
 Tags become first-class objects on the dashboard. The default view collapses each tag into a single summary card rather than showing every monitor individually.
 

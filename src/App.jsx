@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code, X } from 'lucide-react';
+import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code, X, Menu } from 'lucide-react';
 import {
   DndContext, closestCenter,
   KeyboardSensor, PointerSensor,
@@ -108,6 +108,7 @@ export default function App() {
   const [showSettings,    setShowSettings]    = useState(false);
   const [embedMonitor,    setEmbedMonitor]    = useState(null);
   const [editingInstance, setEditingInstance] = useState(null);  // module instance being edited
+  const [mobileMenuOpen,  setMobileMenuOpen]  = useState(false);
   const [viewMode,       setViewMode]       = useState(() => {
     try { return localStorage.getItem('wt-view-mode') || 'flat'; }
     catch { return 'flat'; }
@@ -286,7 +287,7 @@ export default function App() {
           {/* Right controls */}
           <div className="flex items-center gap-3">
 
-            {/* SSE live indicator */}
+            {/* SSE live indicator — desktop only */}
             <div className="hidden sm:flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-50" />
@@ -295,7 +296,7 @@ export default function App() {
               <span className="text-xs font-mono" style={{ color: t.textFaint }}>live</span>
             </div>
 
-            {/* History window selector */}
+            {/* History window selector — desktop only */}
             <div className="hidden sm:flex items-center gap-1.5">
               <span className="text-xs font-mono" style={{ color: t.textMuted }}>Window</span>
               <select
@@ -309,7 +310,7 @@ export default function App() {
               </select>
             </div>
 
-            {/* Sort selector */}
+            {/* Sort selector — desktop only */}
             <div className="hidden sm:flex items-center gap-1.5">
               <span className="text-xs font-mono" style={{ color: t.textMuted }}>Sort</span>
               <select
@@ -323,52 +324,144 @@ export default function App() {
               </select>
             </div>
 
-            {/* Alerts bell */}
-            <button onClick={() => setShowAlerts(p => !p)}
-              className="relative p-1.5 rounded transition-colors"
-              style={{ color: ongoingCount > 0 ? '#f87171' : t.textMuted }}
-              title="Alerts">
-              <Bell size={16} />
-              {ongoingCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 flex items-center justify-center text-white font-bold"
-                  style={{ fontSize: 9 }}>
-                  {ongoingCount}
-                </span>
-              )}
-            </button>
+            {/* Desktop icon buttons */}
+            <div className="hidden sm:flex items-center gap-3">
+              {/* Alerts bell */}
+              <button onClick={() => setShowAlerts(p => !p)}
+                className="relative p-1.5 rounded transition-colors"
+                style={{ color: ongoingCount > 0 ? '#f87171' : t.textMuted }}
+                title="Alerts">
+                <Bell size={16} />
+                {ongoingCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 flex items-center justify-center text-white font-bold"
+                    style={{ fontSize: 9 }}>
+                    {ongoingCount}
+                  </span>
+                )}
+              </button>
 
-            {/* Embed full dashboard */}
-            <button onClick={() => setEmbedMonitor(undefined)}
-              className="p-1.5 rounded transition-colors"
-              style={{ color: t.textMuted }}
-              title="Embed dashboard">
-              <Code size={16} />
-            </button>
+              {/* Embed full dashboard */}
+              <button onClick={() => setEmbedMonitor(undefined)}
+                className="p-1.5 rounded transition-colors"
+                style={{ color: t.textMuted }}
+                title="Embed dashboard">
+                <Code size={16} />
+              </button>
 
-            {/* Settings */}
-            <button onClick={() => setShowSettings(true)}
-              className="p-1.5 rounded transition-colors"
-              style={{ color: t.textMuted }}
-              title="Alert settings">
-              <Settings size={16} />
-            </button>
+              {/* Settings */}
+              <button onClick={() => setShowSettings(true)}
+                className="p-1.5 rounded transition-colors"
+                style={{ color: t.textMuted }}
+                title="Settings">
+                <Settings size={16} />
+              </button>
 
-            {/* Theme toggle */}
-            <button onClick={toggleTheme}
-              className="p-1.5 rounded transition-colors"
-              style={{ color: t.textMuted }}
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
-              {isDark ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
+              {/* Theme toggle */}
+              <button onClick={toggleTheme}
+                className="p-1.5 rounded transition-colors"
+                style={{ color: t.textMuted }}
+                title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
+                {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
 
-            {/* Add monitor / module */}
-            <button onClick={openAdd}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-bold rounded transition-colors">
-              <Plus size={14} />
-              Add
-            </button>
+              {/* Add monitor / module */}
+              <button onClick={openAdd}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-bold rounded transition-colors">
+                <Plus size={14} />
+                Add
+              </button>
+            </div>
+
+            {/* Mobile: alerts badge + hamburger */}
+            <div className="flex sm:hidden items-center gap-2">
+              {/* Alerts bell visible on mobile so badge is always accessible */}
+              <button onClick={() => setShowAlerts(p => !p)}
+                className="relative p-1.5 rounded transition-colors"
+                style={{ color: ongoingCount > 0 ? '#f87171' : t.textMuted }}
+                title="Alerts">
+                <Bell size={16} />
+                {ongoingCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 flex items-center justify-center text-white font-bold"
+                    style={{ fontSize: 9 }}>
+                    {ongoingCount}
+                  </span>
+                )}
+              </button>
+
+              <button onClick={() => setMobileMenuOpen(p => !p)}
+                className="p-1.5 rounded transition-colors"
+                style={{ color: t.textMuted }}
+                title="Menu">
+                {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Mobile dropdown menu */}
+        {mobileMenuOpen && (
+          <div className="sm:hidden border-t px-4 py-3 space-y-3"
+            style={{ borderColor: t.cardBorder, backgroundColor: t.headerBg }}>
+
+            {/* Window + Sort selectors */}
+            <div className="flex gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-mono" style={{ color: t.textMuted }}>Window</span>
+                <select
+                  value={historyWindow}
+                  onChange={e => setHistoryWindow(e.target.value)}
+                  className="text-xs font-mono rounded border px-1.5 py-1 appearance-none cursor-pointer focus:outline-none"
+                  style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
+                  {HISTORY_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-mono" style={{ color: t.textMuted }}>Sort</span>
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value)}
+                  className="text-xs font-mono rounded border px-1.5 py-1 appearance-none cursor-pointer focus:outline-none"
+                  style={{ backgroundColor: t.inputBg, color: t.textSecondary, borderColor: t.cardBorder }}>
+                  {SORT_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Action buttons row */}
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setEmbedMonitor(undefined); setMobileMenuOpen(false); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono border transition-colors"
+                style={{ color: t.textMuted, borderColor: t.cardBorder, backgroundColor: t.inputBg }}>
+                <Code size={13} />
+                Embed
+              </button>
+
+              <button onClick={() => { setShowSettings(true); setMobileMenuOpen(false); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono border transition-colors"
+                style={{ color: t.textMuted, borderColor: t.cardBorder, backgroundColor: t.inputBg }}>
+                <Settings size={13} />
+                Settings
+              </button>
+
+              <button onClick={toggleTheme}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono border transition-colors"
+                style={{ color: t.textMuted, borderColor: t.cardBorder, backgroundColor: t.inputBg }}>
+                {isDark ? <Sun size={13} /> : <Moon size={13} />}
+                {isDark ? 'Light' : 'Dark'}
+              </button>
+
+              <button onClick={() => { openAdd(); setMobileMenuOpen(false); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-bold rounded transition-colors ml-auto">
+                <Plus size={13} />
+                Add
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ── Main ────────────────────────────────────────────────────────────── */}
