@@ -1,5 +1,5 @@
 # ── Stage 1: Build the React frontend ────────────────────────────────────────
-FROM node:20-alpine AS frontend
+FROM node:22-alpine AS frontend
 
 WORKDIR /build
 
@@ -15,7 +15,7 @@ RUN npm run build
 
 # ── Stage 2: Compile native server dependencies ───────────────────────────────
 # net-ping uses a native C extension — needs build tools at compile time only.
-FROM node:20-alpine AS server-deps
+FROM node:22-alpine AS server-deps
 
 RUN apk add --no-cache python3 make g++
 
@@ -26,7 +26,7 @@ RUN npm ci --omit=dev
 
 
 # ── Stage 3: Final runtime image ─────────────────────────────────────────────
-FROM node:20-alpine
+FROM node:22-alpine
 
 # iputils provides the system `ping` binary (used as a fallback if net-ping
 # raw sockets are unavailable, and for general network debugging in the container)
@@ -44,6 +44,7 @@ COPY server/src ./src
 COPY --from=frontend /build/server/public ./public
 
 # SQLite data directory — mount a volume here for persistence
+ENV DATA_DIR=/app/data
 VOLUME ["/app/data"]
 
 EXPOSE 3000
