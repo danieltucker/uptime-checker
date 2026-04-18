@@ -463,6 +463,11 @@ export default function App() {
         )}
       </header>
 
+      {/* ── Summary strip ───────────────────────────────────────────────────── */}
+      {!loading && !error && userMonitors.length > 0 && (
+        <SummaryBar monitors={userMonitors} />
+      )}
+
       {/* ── Main ────────────────────────────────────────────────────────────── */}
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-5">
 
@@ -481,7 +486,6 @@ export default function App() {
 
         {!loading && !error && (
           <>
-            {userMonitors.length > 0 && <SummaryBar monitors={userMonitors} />}
 
             {/* Tag filter row */}
             {allTags.length > 0 && (

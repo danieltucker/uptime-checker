@@ -3,6 +3,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 export const DARK = {
   pageBg:          '#0d1117',
   headerBg:        '#161b22',
+  summaryBg:       '#1e252c',
+  summaryBorder:   '#292e34',
   cardBg:          '#161b22',
   cardBorder:      '#30363d',
   cardBorderHover: '#484f58',
@@ -24,6 +26,8 @@ export const DARK = {
 export const LIGHT = {
   pageBg:          '#f6f8fa',
   headerBg:        '#ffffff',
+  summaryBg:       '#eaeef2',
+  summaryBorder:   '#d0d7de',
   cardBg:          '#ffffff',
   cardBorder:      '#d0d7de',
   cardBorderHover: '#9aa2ab',
