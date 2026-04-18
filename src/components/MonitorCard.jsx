@@ -354,37 +354,28 @@ function MonitorCardInner({
         <div className="flex items-center gap-1 shrink-0" style={{ pointerEvents: 'all' }}
           onPointerDown={e => e.stopPropagation()}>
 
-          {/* Width toggle — visible labeled chip */}
+          {/* Width toggle — two chips, active one highlighted */}
           {onSetWidth && (
-            <button
-              onClick={() => onSetWidth(width === 1 ? 2 : 1)}
-              title={width === 2 ? 'Collapse to 1 column' : 'Expand to 2 columns'}
-              className="flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono transition-all"
-              style={width === 2 ? {
-                color:           '#60a5fa',
-                borderColor:     'rgba(96,165,250,0.4)',
-                backgroundColor: 'rgba(96,165,250,0.1)',
-              } : {
-                color:           t.textMuted,
-                borderColor:     t.cardBorder,
-                backgroundColor: 'transparent',
-              }}
-              onMouseEnter={e => {
-                if (width !== 2) {
-                  e.currentTarget.style.borderColor = t.cardBorderHover;
-                  e.currentTarget.style.color = t.textSecondary;
-                }
-              }}
-              onMouseLeave={e => {
-                if (width !== 2) {
-                  e.currentTarget.style.borderColor = t.cardBorder;
-                  e.currentTarget.style.color = t.textMuted;
-                }
-              }}>
-              {width === 2
-                ? <><Minimize2 size={10} /> Narrow</>
-                : <><ArrowLeftRight size={10} /> Wide</>}
-            </button>
+            <div className="flex items-center rounded border overflow-hidden text-xs font-mono"
+              style={{ borderColor: t.cardBorder }}>
+              {[{ value: 1, label: 'Narrow', Icon: Minimize2 }, { value: 2, label: 'Wide', Icon: ArrowLeftRight }].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => onSetWidth(opt.value)}
+                  title={opt.label}
+                  className="flex items-center gap-1 px-2 py-1 transition-all"
+                  style={width === opt.value ? {
+                    color:           '#60a5fa',
+                    backgroundColor: 'rgba(96,165,250,0.15)',
+                  } : {
+                    color:           t.textMuted,
+                    backgroundColor: 'transparent',
+                  }}>
+                  <opt.Icon size={10} />
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           )}
 
           {onEmbed && (

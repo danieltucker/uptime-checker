@@ -36,13 +36,12 @@ function SortableMonitorCard({ monitor, onEdit, onDelete, onEmbed, width, onSetW
   });
 
   const style = {
-    transform:   CSS.Transform.toString(transform),
+    transform: CSS.Transform.toString(transform),
     transition,
-    gridColumn:  width === 2 ? 'span 2' : 'span 1',
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} className={width === 2 ? 'md:col-span-2' : ''}>
       <MonitorCard
         monitor={monitor}
         onEdit={onEdit}
