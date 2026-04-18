@@ -49,7 +49,7 @@ export async function apiCheck(monitor) {
     : Promise.resolve(null);
 
   // ── Build request headers ──────────────────────────────────────────────────
-  const headers = { 'User-Agent': 'WatchTower/4.0 uptime-monitor' };
+  const headers = { 'User-Agent': 'WatchTower/4.5' };
 
   if (authType === 'basic' && authUser && authPass) {
     headers['Authorization'] =

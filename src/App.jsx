@@ -279,7 +279,7 @@ export default function App() {
             </span>
             <span className="hidden sm:inline text-xs font-mono px-2 py-0.5 rounded border"
               style={{ color: t.textFaint, borderColor: t.cardBorder }}>
-              uptime monitor · v4.5
+              watchtower · v4.5
             </span>
           </div>
 

@@ -42,7 +42,7 @@ export async function httpCheck(target) {
       timeout:         { request: 10_000 },
       followRedirect:  true,
       throwHttpErrors: false,
-      headers:         { 'User-Agent': 'WatchTower/4.0 uptime-monitor' },
+      headers:         { 'User-Agent': 'WatchTower/4.5' },
     });
   } catch (err) {
     return { status: 'down', error: err.message };
