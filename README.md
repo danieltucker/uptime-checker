@@ -7,7 +7,7 @@ WatchTower makes real HTTP(S), TCP, and ICMP checks on configurable intervals, s
 Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing APIs and websites just as well as internal services like a Plex server, a NAS, a database port, or a self-hosted app behind a reverse proxy.
 
 ![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
-![Version](https://img.shields.io/badge/version-4.5-blue)
+![Version](https://img.shields.io/badge/version-5.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ![WatchTower dashboard](images/screenshot.png)
@@ -37,14 +37,23 @@ Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing
 - **Three alert levels** - Outage, Degraded (configurable ping threshold), and Recovered; each with independent panel visibility and notification frequency (once / every 15 min)
 - **HTTP body validation** - optional plain-string check on the response body; treats a mismatch as DOWN even on a 2xx response
 - **Telegram** - free push notifications via Telegram Bot API
-- **Email** - SMTP delivery; works with Gmail App Passwords, Brevo, Resend, or any relay
+- **Email** - SMTP delivery; works with Gmail App Passwords, Resend, or any relay; one-click provider presets for Gmail, Outlook, Yahoo, and iCloud
 - **SMS** - Twilio integration (~$0.008/message)
 - **Test before saving** - send a test alert with your current form values without committing to save
 
+### Reports
+- **Scheduled email reports** - periodic status summaries sent via email on a daily, weekly, or monthly schedule
+- **Rich HTML email** - dark header with aggregate stats (avg uptime, up/down count, monitor total) followed by a per-monitor table showing status, uptime %, average ping, incident count, and total checks
+- **Tag filtering** - optionally restrict a report to monitors with a specific tag; blank sends all monitors
+- **Configurable send time** - reports fire at any HH:MM in server local time; the scheduler checks every 60 seconds
+- **Test button** - send an immediate 24-hour preview report without waiting for the schedule
+- **Email client compatibility** - inline styles, `bgcolor` HTML attributes for Outlook 2007–2019, and `color-scheme: light` meta to prevent dark-mode inversion in Gmail and Apple Mail
+
 ### Settings
-- **Tabbed settings panel** - centered modal with General and Notifications tabs
+- **Tabbed settings panel** - centered modal with General, Notifications, Reports, and Modules tabs
 - **General tab** - dashboard-wide preferences including grouped vs flat view toggle
 - **Filtered channels** - per-monitor alert picker only shows channels enabled in Settings; incomplete credentials block save with an error
+- **Reports tab** - schedule configuration, tag filter, last-sent timestamp, and test send button; save is blocked if SMTP is not yet configured
 
 ### Embed
 - **Per-monitor widget** - 360x230 iframe showing a single card with live updates
@@ -211,11 +220,13 @@ Open the Settings panel (gear icon in the header) to configure channels. Test an
 | Host     | `smtp.gmail.com`                 |
 | Port     | `587` (STARTTLS) or `465` (SSL)  |
 | Username | your email address               |
-| Password | Gmail App Password or relay key  |
+| Password | App Password or account password |
 | From     | the sending address              |
 | To       | where alerts should land         |
 
-Gmail users: use an [App Password](https://support.google.com/accounts/answer/185833), not your account password.
+Use the **Quick setup** buttons in the Notifications tab to auto-fill the host and port for Gmail, Outlook, Yahoo, or iCloud. A contextual note appears for any provider that requires an App Password.
+
+Gmail, Yahoo, and iCloud users: use an App Password, not your account password. Outlook users with 2FA enabled also need an App Password.
 
 ### SMS via Twilio
 
@@ -262,7 +273,7 @@ Embedded views receive live SSE updates and have no edit, delete, or settings co
 | GET    | `/api/events`                     | SSE stream of live check results                     |
 | GET    | `/api/settings`                   | Get alert channel configuration                      |
 | PUT    | `/api/settings`                   | Save alert channel configuration                     |
-| POST   | `/api/settings/test/:channel`     | Send a test alert (`telegram`, `email`, `twilio`)    |
+| POST   | `/api/settings/test/:channel`     | Send a test alert (`telegram`, `email`, `twilio`, `report`) |
 
 ### Monitor schema
 
@@ -338,6 +349,8 @@ watchtower/
         ├── server.js                # Express app + static serving
         ├── scheduler.js             # Per-monitor polling + alert state machine
         ├── alerter.js               # Telegram / Email / Twilio dispatch
+        ├── reporter.js              # Report data aggregation + HTML email template
+        ├── report-scheduler.js      # 60s tick — fires scheduled reports at configured HH:MM
         ├── sse.js                   # SSE broadcast to connected clients
         ├── db/index.js              # SQLite schema, migrations, settings helpers
         ├── checkers/
@@ -497,6 +510,33 @@ A plugin architecture that extends WatchTower beyond uptime monitoring. Modules 
 - Fixed "Unknown module" error when adding a module instance — server registry now uses `pathToFileURL` for reliable dynamic imports on Windows
 - Fixed incorrect Anthropic usage API endpoint (`/v1/usage` → `/v1/organizations/usage_report/messages`) and updated token field names to match the reporting API response
 - All `alert()` popup errors replaced with in-page error display (module instance form footer, monitor form footer, page-level toast for delete failures)
+
+### v5.0.0
+
+#### Scheduled email reports
+
+- New **Reports** tab in Settings — configure a daily, weekly, or monthly status report sent via email at a chosen time
+- Reports cover the full period since the last send: per-monitor uptime %, average ping, incident count, and total checks, plus an aggregate summary strip (average uptime, monitors up/down, total count)
+- Optional **tag filter** restricts the report to monitors matching a specific tag; blank includes all monitors
+- **Test button** sends an immediate 24-hour preview without touching the schedule or updating the last-sent timestamp
+- **Validation** — the save button blocks enabling reports when SMTP credentials are not yet configured in Notifications, and highlights the send-time field if it is blank
+- Reports use SMTP credentials from the Notifications tab directly — the Email alert channel does not need to be enabled for alerts, only configured
+- `report_last_sent` is managed server-side only and cannot be overwritten via the settings API
+
+#### Email client compatibility
+
+- Report emails now include `bgcolor` HTML attributes on every table cell — Outlook 2007–2019 uses Word's rendering engine and ignores CSS `background` on table cells; without `bgcolor` the dark header sections render white, making the text invisible
+- Added `<meta name="color-scheme" content="light">` and `<meta name="supported-color-schemes" content="light">` to prevent Gmail and Apple Mail from inverting the dark header in dark mode
+- Row background colors moved from `<tr>` (ignored by Outlook) to individual `<td>` elements
+- Status badges rebuilt as inline tables rather than `<span>` elements with background (Outlook ignores `background` on inline elements)
+- Plain-text fallback included for clients that don't render HTML
+
+#### SMTP provider presets
+
+- One-click **Quick setup** buttons in the Email channel: **Gmail**, **Outlook**, **Yahoo**, **iCloud**
+- Clicking a provider auto-fills the SMTP host and port; the active provider is highlighted in blue
+- A contextual note appears below the buttons for providers that require an App Password, with instructions specific to that provider
+- Host and port fields remain fully editable for custom relays
 
 ---
 
