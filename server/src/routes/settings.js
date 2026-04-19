@@ -2,6 +2,7 @@ import { Router }                               from 'express';
 import { getSetting, setSetting, getAllSettings } from '../db/index.js';
 import { sendTelegramAlert, sendEmailAlert,
          sendTwilioAlert, sendWebhookAlert }      from '../alerter.js';
+import { sendReport }                            from '../reporter.js';
 
 const router = Router();
 
@@ -12,6 +13,8 @@ const KNOWN_KEYS = [
   'twilio_enabled', 'twilio_account_sid', 'twilio_auth_token',
   'twilio_from', 'twilio_to',
   'webhook_enabled', 'webhook_url',
+  'report_enabled', 'report_interval', 'report_time', 'report_tag_filter',
+  'report_last_sent',
 ];
 
 // ── GET /api/settings ─────────────────────────────────────────────────────────
@@ -29,8 +32,12 @@ router.get('/', (_req, res) => {
 
 // ── PUT /api/settings ─────────────────────────────────────────────────────────
 
+// report_last_sent is written by the report-scheduler only — never from the UI
+const READ_ONLY_KEYS = new Set(['report_last_sent']);
+
 router.put('/', (req, res) => {
   for (const key of KNOWN_KEYS) {
+    if (READ_ONLY_KEYS.has(key)) continue;
     if (key in req.body) setSetting(key, req.body[key]);
   }
   // Also persist any module.* keys
@@ -61,6 +68,12 @@ router.post('/test/:channel', async (req, res) => {
       case 'webhook':
         await sendWebhookAlert(TEST_MONITOR, 'down', overrides);
         break;
+      case 'report': {
+        const end   = new Date();
+        const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+        await sendReport('Test', start.toISOString(), end.toISOString());
+        break;
+      }
       default:
         return res.status(400).json({ error: 'Unknown channel' });
     }

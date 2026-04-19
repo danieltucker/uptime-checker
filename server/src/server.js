@@ -8,6 +8,7 @@ import settingsRouter         from './routes/settings.js';
 import alertsRouter           from './routes/alerts.js';
 import moduleInstancesRouter  from './routes/module-instances.js';
 import { loadModules, registry } from './modules/registry.js';
+import { initReportScheduler }  from './report-scheduler.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT      = process.env.PORT ?? 3000;
@@ -48,4 +49,5 @@ app.get('*', (_req, res) => {
 app.listen(PORT, () => {
   console.log(`[watchtower] server listening on http://localhost:${PORT}`);
   initScheduler();
+  initReportScheduler();
 });

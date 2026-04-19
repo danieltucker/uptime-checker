@@ -279,7 +279,7 @@ export default function App() {
             </span>
             <span className="hidden sm:inline text-xs font-mono px-2 py-0.5 rounded border"
               style={{ color: t.textFaint, borderColor: t.cardBorder }}>
-              watchtower · v4.5
+              watchtower · v5.0
             </span>
           </div>
 

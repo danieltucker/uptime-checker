@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink } from 'lucide-react';
+import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2 } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
 
@@ -10,12 +10,14 @@ const DEFAULT_SETTINGS = {
   twilio_enabled: '', twilio_account_sid: '', twilio_auth_token: '',
   twilio_from: '', twilio_to: '',
   webhook_enabled: '', webhook_url: '',
+  report_enabled: '', report_interval: 'weekly', report_time: '08:00', report_tag_filter: '',
 };
 
 const TABS = [
   { id: 'general',       label: 'General',       Icon: SlidersHorizontal },
-  { id: 'notifications', label: 'Notifications',  Icon: Bell    },
-  { id: 'modules',       label: 'Modules',        Icon: Puzzle  },
+  { id: 'notifications', label: 'Notifications',  Icon: Bell           },
+  { id: 'reports',       label: 'Reports',        Icon: FileBarChart2  },
+  { id: 'modules',       label: 'Modules',        Icon: Puzzle         },
 ];
 
 // Required fields per channel — used for pre-save validation
@@ -41,6 +43,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
   const [moduleSettings, setModuleSettings] = useState({});  // module.* keys
   const [moduleSaving,   setModuleSaving]   = useState({});  // moduleId → bool
   const [moduleSaved,    setModuleSaved]    = useState({});  // moduleId → bool
+  const [reportLastSent, setReportLastSent] = useState('');
   const [saving,        setSaving]        = useState(false);
   const [saved,         setSaved]         = useState(false);
   const [saveError,     setSaveError]     = useState('');
@@ -56,8 +59,9 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
         const notifData  = {};
         const moduleData = {};
         for (const [k, v] of Object.entries(data)) {
-          if (k.startsWith('module.')) moduleData[k] = v;
-          else notifData[k] = v;
+          if (k.startsWith('module.'))        moduleData[k] = v;
+          else if (k === 'report_last_sent')  setReportLastSent(v);
+          else                                notifData[k]  = v;
         }
         setSettings(s => ({ ...s, ...notifData }));
         setModuleSettings(moduleData);
@@ -123,6 +127,19 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
       return;
     }
 
+    // Validate report settings when enabled
+    if (settings.report_enabled === '1') {
+      if (!settings.email_smtp_host?.trim() || !settings.email_to?.trim()) {
+        setSaveError('Reports require Email to be configured in the Notifications tab first.');
+        return;
+      }
+      if (!settings.report_time?.trim()) {
+        setSaveError('Please set a send time for reports.');
+        setInvalidFields(new Set(['report_time']));
+        return;
+      }
+    }
+
     setSaveError('');
     setInvalidFields(new Set());
     setSaving(true);
@@ -166,8 +183,9 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
 
   const activeTabDef = TABS.find(tab => tab.id === activeTab);
   const contentSubtitle =
-    activeTab === 'general'       ? 'Dashboard-wide display preferences'  :
-    activeTab === 'notifications' ? 'Configure alert delivery channels'   :
+    activeTab === 'general'       ? 'Dashboard-wide display preferences'        :
+    activeTab === 'notifications' ? 'Configure alert delivery channels'         :
+    activeTab === 'reports'       ? 'Schedule periodic email status reports'    :
                                     'Install modules and manage credentials';
 
   return (
@@ -251,7 +269,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
           {/* Version label — desktop only */}
           <div className="hidden sm:block px-5 py-5">
             <div className="text-xs font-mono" style={{ color: t.textFaint }}>
-              WatchTower v4.5
+              WatchTower v5.0
             </div>
           </div>
         </aside>
@@ -306,6 +324,18 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
                 isDark={isDark}
               />
             )}
+            {activeTab === 'reports' && (
+              <ReportsTab
+                settings={settings}
+                set={set}
+                reportLastSent={reportLastSent}
+                invalidFields={invalidFields}
+                inputCls={inputCls}
+                inputStyle={inputStyle}
+                t={t}
+                isDark={isDark}
+              />
+            )}
             {activeTab === 'modules' && (
               <ModulesTab
                 moduleSettings={moduleSettings}
@@ -333,8 +363,8 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
             )}
           </div>
 
-          {/* Footer — save only on Notifications tab */}
-          {activeTab === 'notifications' && (
+          {/* Footer — save on Notifications and Reports tabs */}
+          {(activeTab === 'notifications' || activeTab === 'reports') && (
             <div
               className="flex items-center justify-between gap-4 px-5 sm:px-7 py-4 border-t shrink-0"
               style={{ borderColor: t.cardBorder }}>
@@ -344,7 +374,9 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
                     {saveError}
                   </span>
                 : <span className="text-xs font-mono hidden sm:block" style={{ color: t.textFaint }}>
-                    Enable channels per monitor in the Edit form
+                    {activeTab === 'reports'
+                      ? 'Reports use the Email channel configured in Notifications'
+                      : 'Enable channels per monitor in the Edit form'}
                   </span>
               }
               <button
@@ -414,6 +446,17 @@ function GeneralTab({ viewMode, onViewModeChange, chartYMax, onChartYMaxChange, 
 
 // ── Notifications tab ─────────────────────────────────────────────────────────
 
+const SMTP_PRESETS = [
+  { name: 'Gmail',   host: 'smtp.gmail.com',        port: '587',
+    note: 'Gmail requires an App Password. Enable 2-Step Verification, then generate one at myaccount.google.com → Security → App Passwords.' },
+  { name: 'Outlook', host: 'smtp-mail.outlook.com', port: '587',
+    note: 'Use your full Outlook/Hotmail/Live email address and account password. If you have 2FA enabled, generate an App Password instead.' },
+  { name: 'Yahoo',   host: 'smtp.mail.yahoo.com',   port: '587',
+    note: 'Yahoo requires an App Password. Go to Yahoo Account Security and generate one under "Generate app password".' },
+  { name: 'iCloud',  host: 'smtp.mail.me.com',      port: '587',
+    note: 'iCloud requires an App-Specific Password. Generate one at appleid.apple.com → Sign-In and Security → App-Specific Passwords.' },
+];
+
 function NotificationsTab({ settings, set, showPass, toggleShow, testState, test, inputCls, inputStyle, invalidFields, t, isDark }) {
   // Returns input style with red border when the field has a validation error
   const fs = (key) => invalidFields.has(key)
@@ -453,7 +496,7 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
 
       <Channel
         title="Email"
-        description="SMTP delivery — works with Gmail App Passwords, Brevo, Resend, or any relay"
+        description="SMTP delivery — works with Gmail App Passwords, Resend, or any SMTP relay"
         enabled={settings.email_enabled === '1'}
         hasError={channelHasError('email_smtp_host', 'email_smtp_port', 'email_smtp_user', 'email_smtp_pass', 'email_from', 'email_to')}
         onToggle={v => set('email_enabled', v ? '1' : '')}
@@ -461,6 +504,47 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
         onTest={() => test('email')}
         t={t}
         isDark={isDark}>
+
+        {/* ── Provider presets ── */}
+        {(() => {
+          const active = SMTP_PRESETS.find(p => p.host === settings.email_smtp_host) ?? null;
+          return (
+            <div className="space-y-2 pb-1">
+              <div className="text-xs font-mono uppercase tracking-wider" style={{ color: t.textMuted }}>
+                Quick setup
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {SMTP_PRESETS.map(p => {
+                  const isActive = p.host === settings.email_smtp_host;
+                  return (
+                    <button
+                      key={p.name}
+                      type="button"
+                      onClick={() => { set('email_smtp_host', p.host); set('email_smtp_port', p.port); }}
+                      className="px-3 py-1.5 rounded-lg border text-xs font-mono font-medium transition-all"
+                      style={{
+                        backgroundColor: isActive
+                          ? isDark ? 'rgba(96,165,250,0.15)' : 'rgba(59,130,246,0.1)'
+                          : isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                        borderColor:  isActive ? '#60a5fa' : t.cardBorder,
+                        color:        isActive ? '#60a5fa' : t.textSecondary,
+                      }}>
+                      {p.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {active?.note && (
+                <div className="flex items-start gap-1.5 text-xs font-mono leading-relaxed"
+                  style={{ color: t.textMuted }}>
+                  <AlertCircle size={11} className="mt-0.5 shrink-0" style={{ color: '#f59e0b' }} />
+                  {active.note}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="SMTP Host" invalid={invalidFields.has('email_smtp_host')} t={t}>
             <input value={settings.email_smtp_host}
@@ -562,6 +646,178 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
             className={inputCls} style={fs('webhook_url')} />
         </Field>
       </Channel>
+    </div>
+  );
+}
+
+// ── Reports tab ───────────────────────────────────────────────────────────────
+
+function ReportsTab({ settings, set, reportLastSent, invalidFields, inputCls, inputStyle, t, isDark }) {
+  const [testState, setTestState] = useState(null); // null | 'loading' | 'ok' | errorString
+
+  const fmtLastSent = reportLastSent
+    ? new Date(reportLastSent).toLocaleString()
+    : 'Never';
+
+  const rowBg = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+
+  const timeStyle = invalidFields.has('report_time')
+    ? { ...inputStyle, borderColor: '#ef4444', boxShadow: '0 0 0 2px rgba(239,68,68,0.15)' }
+    : inputStyle;
+
+  const sendTest = async () => {
+    setTestState('loading');
+    try {
+      const res  = await fetch('/api/settings/test/report', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Test failed');
+      setTestState('ok');
+    } catch (err) {
+      setTestState(err.message);
+    } finally {
+      setTimeout(() => setTestState(null), 6000);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Enable toggle */}
+      <SettingRow
+        title="Enable reports"
+        description="Send a periodic email summary covering uptime, average ping, and incident counts for all your monitors."
+        t={t}
+        isDark={isDark}>
+        <Toggle
+          enabled={settings.report_enabled === '1'}
+          onToggle={v => set('report_enabled', v ? '1' : '')}
+          isDark={isDark}
+        />
+      </SettingRow>
+
+      {/* Config card — always visible so users can configure before enabling */}
+      <div
+        className="rounded-xl border overflow-hidden"
+        style={{ borderColor: t.cardBorder }}>
+        <div
+          className="px-5 py-3 border-b"
+          style={{ backgroundColor: rowBg, borderColor: t.cardBorder }}>
+          <div className="text-xs font-mono font-semibold uppercase tracking-wider"
+            style={{ color: t.textSecondary }}>
+            Schedule
+          </div>
+        </div>
+
+        <div className="px-5 py-4 space-y-4" style={{ backgroundColor: t.cardBg }}>
+          {/* Frequency */}
+          <div>
+            <label className="block text-xs font-mono font-medium uppercase tracking-wider mb-1.5"
+              style={{ color: t.textMuted }}>
+              Frequency
+            </label>
+            <select
+              value={settings.report_interval}
+              onChange={e => set('report_interval', e.target.value)}
+              className="w-full rounded-lg border px-3 py-2.5 text-sm font-mono appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/60 transition-all"
+              style={{ backgroundColor: t.inputBg, color: t.textPrimary, borderColor: t.cardBorder }}>
+              <option value="daily">Daily — every 24 hours</option>
+              <option value="weekly">Weekly — every 7 days</option>
+              <option value="monthly">Monthly — every 30 days</option>
+            </select>
+          </div>
+
+          {/* Time */}
+          <div>
+            <label className="block text-xs font-mono font-medium uppercase tracking-wider mb-1.5"
+              style={{ color: t.textMuted }}>
+              Send time <span style={{ color: t.textFaint }}>(server local time, 24-hour)</span>
+            </label>
+            <input
+              type="time"
+              value={settings.report_time}
+              onChange={e => set('report_time', e.target.value)}
+              className={inputCls}
+              style={timeStyle}
+            />
+          </div>
+
+          {/* Tag filter */}
+          <div>
+            <label className="block text-xs font-mono font-medium uppercase tracking-wider mb-1.5"
+              style={{ color: t.textMuted }}>
+              Tag filter <span style={{ color: t.textFaint }}>(optional — blank = all monitors)</span>
+            </label>
+            <input
+              type="text"
+              value={settings.report_tag_filter}
+              onChange={e => set('report_tag_filter', e.target.value)}
+              placeholder="e.g. production"
+              className={inputCls}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Last sent + test button */}
+      <div
+        className="rounded-xl border px-5 py-4"
+        style={{ borderColor: t.cardBorder, backgroundColor: rowBg }}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-xs font-mono font-semibold uppercase tracking-wider mb-0.5"
+              style={{ color: t.textSecondary }}>
+              Last report sent
+            </div>
+            <div className="text-sm font-mono truncate"
+              style={{ color: reportLastSent ? t.textPrimary : t.textFaint }}>
+              {fmtLastSent}
+            </div>
+          </div>
+
+          {/* Test button */}
+          <button
+            onClick={sendTest}
+            disabled={testState === 'loading'}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-xs font-mono font-medium transition-all shrink-0 disabled:opacity-50"
+            style={{
+              color:           testState === 'ok' ? '#22c55e' : testState && testState !== 'loading' ? '#ef4444' : t.textSecondary,
+              borderColor:     testState === 'ok' ? '#22c55e' : testState && testState !== 'loading' ? '#ef4444' : t.cardBorder,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+            }}>
+            {testState === 'loading' ? (
+              <><Loader size={12} className="animate-spin" /> Sending…</>
+            ) : testState === 'ok' ? (
+              <><CheckCircle size={12} /> Sent</>
+            ) : testState ? (
+              <><AlertCircle size={12} /> Failed</>
+            ) : (
+              <><Send size={12} /> Send test</>
+            )}
+          </button>
+        </div>
+
+        {/* Inline error from test */}
+        {testState && testState !== 'loading' && testState !== 'ok' && (
+          <div className="mt-2 text-xs font-mono text-red-400 leading-snug">
+            {testState}
+          </div>
+        )}
+      </div>
+
+      {/* Info note */}
+      <div
+        className="rounded-xl border px-5 py-4 space-y-1.5"
+        style={{ borderColor: t.cardBorder, backgroundColor: isDark ? 'rgba(59,130,246,0.05)' : 'rgba(59,130,246,0.04)' }}>
+        <div className="text-xs font-mono font-semibold" style={{ color: '#60a5fa' }}>
+          How reports work
+        </div>
+        <div className="text-xs font-mono leading-relaxed" style={{ color: t.textMuted }}>
+          Reports use the SMTP credentials from the{' '}
+          <span style={{ color: t.textSecondary }}>Notifications</span> tab — the Email channel
+          does not need to be enabled for alerts, only configured. Each report covers the full
+          period since the previous send. The test button sends a 24-hour preview immediately.
+        </div>
+      </div>
     </div>
   );
 }
