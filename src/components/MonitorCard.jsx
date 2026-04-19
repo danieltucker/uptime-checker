@@ -10,10 +10,12 @@ import { useTheme } from '../hooks/useTheme';
 // ---------------------------------------------------------------------------
 
 const STATUS_STYLES = {
-  up:      { label: 'UP',      cls: 'text-green-400 bg-green-400/10 border-green-400/30', dot: false },
-  down:    { label: 'DOWN',    cls: 'text-red-400   bg-red-400/10   border-red-400/30',   dot: true  },
-  pending: { label: 'PENDING', cls: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dot: false },
+  up:       { label: 'UP',       cls: 'text-green-400 bg-green-400/10 border-green-400/30', dot: false },
+  degraded: { label: 'DEGRADED', cls: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dot: false },
+  down:     { label: 'DOWN',     cls: 'text-red-400   bg-red-400/10   border-red-400/30',   dot: true  },
+  pending:  { label: 'PENDING',  cls: 'text-gray-400  bg-gray-400/10  border-gray-400/30',  dot: false },
 };
+
 
 function StatusBadge({ status }) {
   const { label, cls, dot } = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
@@ -225,7 +227,7 @@ function MonitorCardInner({
   // Chart Y-axis scale: 'auto' | '250' | '500' | '750'
   chartYMax = 'auto',
 }) {
-  const { t } = useTheme();
+  const { t, isDark } = useTheme();
   const chartRef = useRef(null);
 
   // Stable tooltip renderer that closes over chartRef — avoids creating a new
@@ -246,7 +248,16 @@ function MonitorCardInner({
     ttfbMs:    h.ttfbMs,
   }));
 
-  const lineColor  = monitor.status === 'down' ? '#ef4444' : '#22c55e';
+  // Derive display status — server only stores 'up'/'down'; compute 'degraded' here
+  const displayStatus =
+    monitor.status === 'up' &&
+    monitor.degradedThreshold != null &&
+    monitor.currentPing != null &&
+    monitor.currentPing > monitor.degradedThreshold
+      ? 'degraded'
+      : monitor.status;
+
+  const lineColor  = displayStatus === 'down' ? '#ef4444' : displayStatus === 'degraded' ? '#f59e0b' : '#22c55e';
   const gradientId = `spark-${monitor.id}`;
 
   const uptimeColor =
@@ -255,6 +266,10 @@ function MonitorCardInner({
     monitor.uptimePercent >= 95   ? '#fbbf24' : '#f87171';
 
   const alertBadges = monitor.alertTypes?.filter(a => a !== 'None') ?? [];
+
+  const cardShadow = isDark
+    ? '0 2px 8px rgba(0,0,0,0.3)'
+    : '0 1px 4px rgba(0,0,0,0.07)';
 
   // Y-axis domain — fixed max when set, otherwise auto-scale from 0
   const yMax    = chartYMax === 'auto' ? 'auto' : Number(chartYMax);
@@ -269,10 +284,10 @@ function MonitorCardInner({
   if (compact) {
     return (
       <div className="flex flex-col rounded-lg border"
-        style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+        style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: cardShadow }}>
 
         <div className="flex items-center justify-between px-3 pt-3 pb-1.5 gap-1.5">
-          <StatusBadge status={monitor.status} />
+          <StatusBadge status={displayStatus} />
           <span className="text-xs font-mono truncate font-semibold flex-1 ml-1"
             style={{ color: t.textSecondary }}>
             {monitor.label}
@@ -331,9 +346,8 @@ function MonitorCardInner({
         backgroundColor: t.cardBg,
         borderColor: isDragging ? t.cardBorderHover : t.cardBorder,
         opacity: isDragging ? 0.85 : 1,
-      }}
-      onMouseEnter={e => { if (!isDragging) e.currentTarget.style.borderColor = t.cardBorderHover; }}
-      onMouseLeave={e => { if (!isDragging) e.currentTarget.style.borderColor = t.cardBorder; }}>
+        boxShadow: cardShadow,
+      }}>
 
       {/* ── Header — entire area is the drag handle when dragging is enabled ── */}
       <div
@@ -342,7 +356,7 @@ function MonitorCardInner({
         {...(dragHandleProps || {})}>
 
         <div className="flex items-center gap-2 min-w-0 flex-1" style={{ pointerEvents: 'none' }}>
-          <StatusBadge status={monitor.status} />
+          <StatusBadge status={displayStatus} />
           <CheckTypeBadge checkType={monitor.checkType} />
           <span className="text-sm font-semibold truncate" title={monitor.label}
             style={{ color: t.textPrimary }}>
@@ -354,9 +368,9 @@ function MonitorCardInner({
         <div className="flex items-center gap-1 shrink-0" style={{ pointerEvents: 'all' }}
           onPointerDown={e => e.stopPropagation()}>
 
-          {/* Width toggle — two chips, active one highlighted */}
+          {/* Width toggle — two chips, active one highlighted; hidden on mobile */}
           {onSetWidth && (
-            <div className="flex items-center rounded border overflow-hidden text-xs font-mono"
+            <div className="hidden sm:flex items-center rounded border overflow-hidden text-xs font-mono"
               style={{ borderColor: t.cardBorder }}>
               {[{ value: 1, label: 'Narrow', Icon: Minimize2 }, { value: 2, label: 'Wide', Icon: ArrowLeftRight }].map(opt => (
                 <button
@@ -380,28 +394,24 @@ function MonitorCardInner({
 
           {onEmbed && (
             <button onClick={() => onEmbed(monitor)} title="Embed"
-              className="p-1.5 rounded transition-colors"
-              style={{ color: t.textFaint }}
-              onMouseEnter={e => e.currentTarget.style.color = t.textPrimary}
-              onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+              className="p-2 rounded transition-opacity opacity-40 hover:opacity-100"
+              style={{ color: t.textSecondary }}>
               <Code size={13} />
             </button>
           )}
           {onEdit && (
             <button onClick={() => onEdit(monitor)} title="Edit"
-              className="p-1.5 rounded transition-colors"
-              style={{ color: t.textFaint }}
-              onMouseEnter={e => e.currentTarget.style.color = t.textPrimary}
-              onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+              className="p-2 rounded transition-opacity opacity-40 hover:opacity-100"
+              style={{ color: t.textSecondary }}>
               <Edit2 size={13} />
             </button>
           )}
           {onDelete && (
             <button onClick={() => onDelete(monitor.id)} title="Delete"
-              className="p-1.5 rounded transition-colors"
-              style={{ color: t.textFaint }}
+              className="p-2 rounded transition-all opacity-40 hover:opacity-100"
+              style={{ color: t.textSecondary }}
               onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.backgroundColor = 'rgba(248,113,113,0.1)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = t.textFaint; e.currentTarget.style.backgroundColor = ''; }}>
+              onMouseLeave={e => { e.currentTarget.style.color = t.textSecondary; e.currentTarget.style.backgroundColor = ''; }}>
               <Trash2 size={13} />
             </button>
           )}
@@ -445,7 +455,7 @@ function MonitorCardInner({
       {/* ── Assertion error hint (API checks) ───────────────────────────────── */}
       {monitor.status === 'down' && monitor.latest?.error && (
         <div className="px-3 pb-2">
-          <span className="text-xs font-mono truncate block" style={{ color: '#f87171' }}
+          <span className="text-xs font-mono leading-relaxed line-clamp-2" style={{ color: '#f87171' }}
             title={monitor.latest.error}>
             {monitor.latest.error}
           </span>
@@ -455,9 +465,9 @@ function MonitorCardInner({
       {/* ── Sparkline ────────────────────────────────────────────────────────── */}
       <div className="px-2 py-2">
         {chartData.length > 0 ? (
-          <div ref={chartRef} style={{ width: '100%', height: 52 }}>
+          <div ref={chartRef} style={{ width: '100%', height: 68 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 3, right: 2, left: 2, bottom: 3 }}>
+              <AreaChart data={chartData} margin={{ top: 4, right: 2, left: 2, bottom: 4 }}>
                 <defs>
                   <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor={lineColor} stopOpacity={0.25} />
@@ -486,7 +496,7 @@ function MonitorCardInner({
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-[52px] text-xs font-mono"
+          <div className="flex items-center justify-center h-[68px] text-xs font-mono"
             style={{ color: t.textFaint }}>
             awaiting first check…
           </div>
@@ -494,8 +504,8 @@ function MonitorCardInner({
       </div>
 
       {/* ── Footer ───────────────────────────────────────────────────────────── */}
-      <div className="px-4 pb-3 flex items-center justify-between gap-2 mt-auto">
-        <div className="flex items-center gap-2 shrink-0">
+      <div className="px-4 pb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-auto">
+        <div className="flex items-center gap-2 mr-auto">
           <span className="text-xs font-mono" style={{ color: t.textFaint }}>
             {monitor.lastChecked ? (
               <>
@@ -507,7 +517,7 @@ function MonitorCardInner({
           <CertBadge certDays={monitor.latest?.certDays} />
         </div>
 
-        <div className="flex items-center gap-1 flex-wrap justify-end">
+        <div className="flex items-center gap-1 flex-wrap">
           {alertBadges.map(a => (
             <span key={a} className="text-xs font-mono px-1.5 py-0.5 rounded border"
               style={{ color: t.textSecondary, backgroundColor: t.tagBg, borderColor: t.tagBorder }}>
