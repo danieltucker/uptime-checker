@@ -12,7 +12,7 @@ import sslChecker from 'ssl-checker';
 const BODY_SIZE_LIMIT = 256 * 1024; // 256 KB
 
 const safe = (v) =>
-  v != null && !Number.isNaN(v) ? Math.round(v) : null;
+  v != null && !Number.isNaN(v) ? Math.max(0, Math.round(v)) : null;
 
 /** Resolve a dot-notation path against a parsed object. Returns undefined if any
  *  segment is missing. Handles numeric keys for array access (e.g. "items.0.id"). */

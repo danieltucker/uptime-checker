@@ -19,7 +19,7 @@ import got        from 'got';
 import sslChecker from 'ssl-checker';
 
 const safe = (v) =>
-  v != null && !Number.isNaN(v) ? Math.round(v) : null;
+  v != null && !Number.isNaN(v) ? Math.max(0, Math.round(v)) : null;
 
 export async function httpCheck(target) {
   const url     = /^https?:\/\//i.test(target) ? target : `https://${target}`;
