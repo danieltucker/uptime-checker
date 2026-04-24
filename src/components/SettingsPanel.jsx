@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2, Plus, Wifi, Globe, Terminal } from 'lucide-react';
+import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2, Plus, Wifi, Globe, Terminal, Palette } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
 import { NETWORK_REF_PRESETS, DEFAULT_NETWORK_REFS_ENABLED } from '../types/networkRefs.js';
@@ -15,7 +15,8 @@ const DEFAULT_SETTINGS = {
 };
 
 const TABS = [
-  { id: 'general',       label: 'General',       Icon: SlidersHorizontal },
+  { id: 'appearance',    label: 'Appearance',     Icon: Palette        },
+  { id: 'general',       label: 'General',        Icon: SlidersHorizontal },
   { id: 'notifications', label: 'Notifications',  Icon: Bell           },
   { id: 'reports',       label: 'Reports',        Icon: FileBarChart2  },
   { id: 'network',       label: 'Network',        Icon: Wifi           },
@@ -38,7 +39,7 @@ const CHANNEL_VALIDATION = [
 // ── SettingsPanel ─────────────────────────────────────────────────────────────
 
 export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange }) {
-  const { t, isDark } = useTheme();
+  const { t, isDark, themeMode, setThemeMode } = useTheme();
   const [activeTab,        setActiveTab]        = useState('general');
   const [mobileContentOpen, setMobileContentOpen] = useState(false);
   const [settings,      setSettings]      = useState(DEFAULT_SETTINGS);
@@ -242,6 +243,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
 
   const activeTabDef = TABS.find(tab => tab.id === activeTab);
   const contentSubtitle =
+    activeTab === 'appearance'    ? 'Theme and visual preferences'              :
     activeTab === 'general'       ? 'Dashboard-wide display preferences'        :
     activeTab === 'notifications' ? 'Configure alert delivery channels'         :
     activeTab === 'reports'       ? 'Schedule periodic email status reports'    :
@@ -329,7 +331,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
           {/* Version label — desktop only */}
           <div className="hidden sm:block px-5 py-5">
             <div className="text-xs font-mono" style={{ color: t.textFaint }}>
-              WatchTower v5.1
+              WatchTower v5.2
             </div>
           </div>
         </aside>
@@ -374,6 +376,14 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
 
           {/* Scrollable content */}
           <div className="flex-1 overflow-y-auto px-5 sm:px-7 pb-4">
+            {activeTab === 'appearance' && (
+              <AppearanceTab
+                themeMode={themeMode}
+                setThemeMode={setThemeMode}
+                isDark={isDark}
+                t={t}
+              />
+            )}
             {activeTab === 'general' && (
               <GeneralTab
                 viewMode={viewMode}
@@ -1227,6 +1237,63 @@ function PasswordInput({ value, onChange, show, onToggle, placeholder, cls, styl
         style={{ color: t.textSecondary }}>
         {show ? <EyeOff size={14} /> : <Eye size={14} />}
       </button>
+    </div>
+  );
+}
+
+// ── Appearance tab ────────────────────────────────────────────────────────────
+
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Light' },
+  { value: 'auto',  label: 'Auto'  },
+  { value: 'dark',  label: 'Dark'  },
+];
+
+function AppearanceTab({ themeMode, setThemeMode, isDark, t }) {
+  return (
+    <div className="space-y-3">
+      <SettingRow
+        title="Theme"
+        description="Choose light or dark, or let WatchTower follow your operating system setting."
+        t={t}
+        isDark={isDark}>
+        <div className="flex shrink-0">
+          {THEME_OPTIONS.map(({ value, label }, i) => {
+            const isActive = themeMode === value;
+            const isFirst  = i === 0;
+            const isLast   = i === THEME_OPTIONS.length - 1;
+            return (
+              <button
+                key={value}
+                onClick={() => setThemeMode(value)}
+                className="px-4 py-1.5 text-xs font-mono font-medium border transition-all"
+                style={{
+                  borderRadius:    isFirst ? '0.5rem 0 0 0.5rem' : isLast ? '0 0.5rem 0.5rem 0' : '0',
+                  marginLeft:      i > 0 ? '-1px' : 0,
+                  position:        'relative',
+                  zIndex:          isActive ? 1 : 0,
+                  backgroundColor: isActive
+                    ? isDark ? 'rgba(96,165,250,0.15)' : 'rgba(59,130,246,0.1)'
+                    : isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                  borderColor:     isActive ? '#60a5fa' : t.cardBorder,
+                  color:           isActive ? '#60a5fa' : t.textSecondary,
+                }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </SettingRow>
+
+      {themeMode === 'auto' && (
+        <div
+          className="px-4 py-2.5 rounded-lg text-xs font-mono"
+          style={{ color: t.textMuted, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}>
+          Currently showing{' '}
+          <span style={{ color: t.textSecondary }}>{isDark ? 'dark' : 'light'}</span>
+          {' '}mode based on your OS setting.
+        </div>
+      )}
     </div>
   );
 }

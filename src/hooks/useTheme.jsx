@@ -46,23 +46,48 @@ export const LIGHT = {
   scrollThumbHover:'#9aa2ab',
 };
 
-const ThemeContext = createContext({ isDark: true, t: DARK, toggle: () => {} });
+const ThemeContext = createContext({ isDark: true, t: DARK, themeMode: 'auto', setThemeMode: () => {} });
 
 export function ThemeProvider({ children }) {
-  const [isDark, setIsDark] = useState(() => {
-    try { return localStorage.getItem('wt-theme') !== 'light'; }
+  const [themeMode, setThemeMode] = useState(() => {
+    try {
+      const stored = localStorage.getItem('wt-theme');
+      if (stored === 'light' || stored === 'dark' || stored === 'auto') return stored;
+      return 'auto';
+    } catch {
+      return 'auto';
+    }
+  });
+
+  // Tracks the live OS preference so auto mode re-renders when the OS changes.
+  const [osPrefersDark, setOsPrefersDark] = useState(() => {
+    try { return window.matchMedia('(prefers-color-scheme: dark)').matches; }
     catch { return true; }
   });
 
+  // Wire up / tear down the OS preference listener only while in auto mode.
+  useEffect(() => {
+    if (themeMode !== 'auto') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e) => setOsPrefersDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [themeMode]);
+
+  const isDark =
+    themeMode === 'dark'  ? true  :
+    themeMode === 'light' ? false :
+    osPrefersDark;
+
   const t = isDark ? DARK : LIGHT;
 
+  // Persist the chosen mode and apply body / scrollbar styles whenever resolved theme changes.
   useEffect(() => {
-    try { localStorage.setItem('wt-theme', isDark ? 'dark' : 'light'); }
+    try { localStorage.setItem('wt-theme', themeMode); }
     catch {}
 
     document.body.style.backgroundColor = t.pageBg;
 
-    // Update scrollbar styles dynamically
     const styleId = 'wt-scrollbar-style';
     let el = document.getElementById(styleId);
     if (!el) {
@@ -75,12 +100,10 @@ export function ThemeProvider({ children }) {
       ::-webkit-scrollbar-thumb { background: ${t.scrollThumb}; border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: ${t.scrollThumbHover}; }
     `;
-  }, [isDark, t]);
-
-  const toggle = () => setIsDark(p => !p);
+  }, [isDark, themeMode, t]);
 
   return (
-    <ThemeContext.Provider value={{ isDark, t, toggle }}>
+    <ThemeContext.Provider value={{ isDark, t, themeMode, setThemeMode }}>
       {children}
     </ThemeContext.Provider>
   );

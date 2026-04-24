@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code, X, Menu } from 'lucide-react';
+import { Plus, Radio, Activity, AlertTriangle, Bell, Tag as TagIcon, Settings, Code, X, Menu } from 'lucide-react';
 import {
   DndContext, closestCenter,
   KeyboardSensor, PointerSensor,
@@ -73,7 +73,7 @@ const SORT_OPTIONS = [
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { isDark, t, toggle: toggleTheme } = useTheme();
+  const { isDark, t } = useTheme();
 
   const [historyWindow,  setHistoryWindow]  = useState(() => {
     try { return localStorage.getItem('wt-history-window') || '1h'; }
@@ -257,7 +257,7 @@ export default function App() {
             </span>
             <span className="hidden sm:inline text-xs font-mono px-2 py-0.5 rounded border"
               style={{ color: t.textFaint, borderColor: t.cardBorder }}>
-              watchtower · v5.1
+              watchtower · v5.2
             </span>
           </div>
 
@@ -303,14 +303,6 @@ export default function App() {
                 style={{ color: t.textMuted }}
                 title="Settings">
                 <Settings size={16} />
-              </button>
-
-              {/* Theme toggle */}
-              <button onClick={toggleTheme}
-                className="p-1.5 rounded transition-colors"
-                style={{ color: t.textMuted }}
-                title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
-                {isDark ? <Sun size={16} /> : <Moon size={16} />}
               </button>
 
               {/* Add monitor / module */}
@@ -366,13 +358,6 @@ export default function App() {
                 style={{ color: t.textMuted, borderColor: t.cardBorder, backgroundColor: t.inputBg }}>
                 <Settings size={13} />
                 Settings
-              </button>
-
-              <button onClick={toggleTheme}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono border transition-colors"
-                style={{ color: t.textMuted, borderColor: t.cardBorder, backgroundColor: t.inputBg }}>
-                {isDark ? <Sun size={13} /> : <Moon size={13} />}
-                {isDark ? 'Light' : 'Dark'}
               </button>
 
               <button onClick={() => { openAdd(); setMobileMenuOpen(false); }}
