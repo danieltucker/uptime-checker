@@ -15,6 +15,7 @@ const KNOWN_KEYS = [
   'webhook_enabled', 'webhook_url',
   'report_enabled', 'report_interval', 'report_time', 'report_tag_filter',
   'report_last_sent',
+  'network_refs_enabled', 'network_refs_custom',
 ];
 
 // ── GET /api/settings ─────────────────────────────────────────────────────────

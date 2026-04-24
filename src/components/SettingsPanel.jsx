@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2 } from 'lucide-react';
+import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2, Plus, Wifi, Globe, Terminal } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
+import { NETWORK_REF_PRESETS, DEFAULT_NETWORK_REFS_ENABLED } from '../types/networkRefs.js';
 
 const DEFAULT_SETTINGS = {
   telegram_enabled: '', telegram_token: '', telegram_chat_id: '',
@@ -17,6 +18,7 @@ const TABS = [
   { id: 'general',       label: 'General',       Icon: SlidersHorizontal },
   { id: 'notifications', label: 'Notifications',  Icon: Bell           },
   { id: 'reports',       label: 'Reports',        Icon: FileBarChart2  },
+  { id: 'network',       label: 'Network',        Icon: Wifi           },
   { id: 'modules',       label: 'Modules',        Icon: Puzzle         },
 ];
 
@@ -43,6 +45,8 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
   const [moduleSettings, setModuleSettings] = useState({});  // module.* keys
   const [moduleSaving,   setModuleSaving]   = useState({});  // moduleId → bool
   const [moduleSaved,    setModuleSaved]    = useState({});  // moduleId → bool
+  const [networkRefsEnabled, setNetworkRefsEnabled] = useState(DEFAULT_NETWORK_REFS_ENABLED);
+  const [networkRefsCustom,  setNetworkRefsCustom]  = useState([]);
   const [reportLastSent, setReportLastSent] = useState('');
   const [saving,        setSaving]        = useState(false);
   const [saved,         setSaved]         = useState(false);
@@ -59,9 +63,19 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
         const notifData  = {};
         const moduleData = {};
         for (const [k, v] of Object.entries(data)) {
-          if (k.startsWith('module.'))        moduleData[k] = v;
-          else if (k === 'report_last_sent')  setReportLastSent(v);
-          else                                notifData[k]  = v;
+          if (k.startsWith('module.')) {
+            moduleData[k] = v;
+          } else if (k === 'report_last_sent') {
+            setReportLastSent(v);
+          } else if (k === 'network_refs_enabled') {
+            try { setNetworkRefsEnabled(v ? JSON.parse(v) : DEFAULT_NETWORK_REFS_ENABLED); }
+            catch { setNetworkRefsEnabled(DEFAULT_NETWORK_REFS_ENABLED); }
+          } else if (k === 'network_refs_custom') {
+            try { setNetworkRefsCustom(v ? JSON.parse(v) : []); }
+            catch { setNetworkRefsCustom([]); }
+          } else {
+            notifData[k] = v;
+          }
         }
         setSettings(s => ({ ...s, ...notifData }));
         setModuleSettings(moduleData);
@@ -147,14 +161,59 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
       await fetch('/api/settings', {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(settings),
+        body:    JSON.stringify({
+          ...settings,
+          network_refs_enabled: JSON.stringify(networkRefsEnabled),
+          network_refs_custom:  JSON.stringify(networkRefsCustom),
+        }),
       });
+      await syncNetworkRefs(networkRefsEnabled, networkRefsCustom);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
       console.error('[settings] save failed:', err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const syncNetworkRefs = async (enabledTargets, customRefs) => {
+    try {
+      const res = await fetch('/api/monitors?window=1h');
+      if (!res.ok) return;
+      const allMonitors = await res.json();
+      const currentRefs = allMonitors.filter(m => m.tags?.includes('_ref'));
+
+      const enabledPresets = NETWORK_REF_PRESETS.filter(p => enabledTargets.includes(p.target));
+      const desired = [...enabledPresets, ...customRefs];
+      const desiredTargetSet = new Set(desired.map(d => d.target));
+      const currentTargetSet = new Set(currentRefs.map(m => m.target));
+
+      for (const entry of desired) {
+        if (!currentTargetSet.has(entry.target)) {
+          await fetch('/api/monitors', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              label:       entry.label,
+              target:      entry.target,
+              checkType:   entry.checkType,
+              interval:    60,
+              tags:        ['_ref'],
+              alertTypes:  ['None'],
+              description: 'Network reference',
+            }),
+          });
+        }
+      }
+
+      for (const ref of currentRefs) {
+        if (!desiredTargetSet.has(ref.target)) {
+          await fetch(`/api/monitors/${ref.id}`, { method: 'DELETE' });
+        }
+      }
+    } catch (err) {
+      console.error('[network-refs] sync failed:', err);
     }
   };
 
@@ -186,6 +245,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
     activeTab === 'general'       ? 'Dashboard-wide display preferences'        :
     activeTab === 'notifications' ? 'Configure alert delivery channels'         :
     activeTab === 'reports'       ? 'Schedule periodic email status reports'    :
+    activeTab === 'network'       ? 'Configure network reference monitors'      :
                                     'Install modules and manage credentials';
 
   return (
@@ -269,7 +329,7 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
           {/* Version label — desktop only */}
           <div className="hidden sm:block px-5 py-5">
             <div className="text-xs font-mono" style={{ color: t.textFaint }}>
-              WatchTower v5.0
+              WatchTower v5.1
             </div>
           </div>
         </aside>
@@ -336,6 +396,16 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
                 isDark={isDark}
               />
             )}
+            {activeTab === 'network' && (
+              <NetworkTab
+                networkRefsEnabled={networkRefsEnabled}
+                setNetworkRefsEnabled={setNetworkRefsEnabled}
+                networkRefsCustom={networkRefsCustom}
+                setNetworkRefsCustom={setNetworkRefsCustom}
+                t={t}
+                isDark={isDark}
+              />
+            )}
             {activeTab === 'modules' && (
               <ModulesTab
                 moduleSettings={moduleSettings}
@@ -363,8 +433,8 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
             )}
           </div>
 
-          {/* Footer — save on Notifications and Reports tabs */}
-          {(activeTab === 'notifications' || activeTab === 'reports') && (
+          {/* Footer — save on Notifications, Reports, and Network tabs */}
+          {(activeTab === 'notifications' || activeTab === 'reports' || activeTab === 'network') && (
             <div
               className="flex items-center justify-between gap-4 px-5 sm:px-7 py-4 border-t shrink-0"
               style={{ borderColor: t.cardBorder }}>
@@ -376,7 +446,9 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
                 : <span className="text-xs font-mono hidden sm:block" style={{ color: t.textFaint }}>
                     {activeTab === 'reports'
                       ? 'Reports use the Email channel configured in Notifications'
-                      : 'Enable channels per monitor in the Edit form'}
+                      : activeTab === 'network'
+                        ? 'Reference monitors update immediately after saving'
+                        : 'Enable channels per monitor in the Edit form'}
                   </span>
               }
               <button
@@ -1155,6 +1227,233 @@ function PasswordInput({ value, onChange, show, onToggle, placeholder, cls, styl
         style={{ color: t.textSecondary }}>
         {show ? <EyeOff size={14} /> : <Eye size={14} />}
       </button>
+    </div>
+  );
+}
+
+// ── Network tab ───────────────────────────────────────────────────────────────
+
+function NetworkTab({ networkRefsEnabled, setNetworkRefsEnabled, networkRefsCustom, setNetworkRefsCustom, t, isDark }) {
+  const [newLabel,  setNewLabel]  = useState('');
+  const [newTarget, setNewTarget] = useState('');
+  const [newType,   setNewType]   = useState('http');
+  const [addError,  setAddError]  = useState('');
+
+  const httpPresets = NETWORK_REF_PRESETS.filter(p => p.checkType === 'http');
+  const icmpPresets = NETWORK_REF_PRESETS.filter(p => p.checkType === 'icmp');
+
+  const togglePreset = (target) => {
+    setNetworkRefsEnabled(prev =>
+      prev.includes(target) ? prev.filter(t => t !== target) : [...prev, target]
+    );
+  };
+
+  const addCustom = () => {
+    setAddError('');
+    if (!newLabel.trim())  { setAddError('Label is required'); return; }
+    if (!newTarget.trim()) { setAddError('Target is required'); return; }
+
+    const allTargets = new Set([
+      ...NETWORK_REF_PRESETS.map(p => p.target),
+      ...networkRefsCustom.map(c => c.target),
+    ]);
+    if (allTargets.has(newTarget.trim())) { setAddError('This target already exists'); return; }
+
+    setNetworkRefsCustom(prev => [...prev, { label: newLabel.trim(), target: newTarget.trim(), checkType: newType }]);
+    setNewLabel('');
+    setNewTarget('');
+    setNewType('http');
+  };
+
+  const removeCustom = (target) => {
+    setNetworkRefsCustom(prev => prev.filter(c => c.target !== target));
+  };
+
+  const inCls   = 'rounded-lg border px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/60 transition-all';
+  const inStyle = { backgroundColor: t.inputBg, color: t.textPrimary, borderColor: t.cardBorder };
+  const rowBg   = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+
+  return (
+    <div className="space-y-5">
+
+      {/* Info banner */}
+      <div
+        className="rounded-xl border px-4 py-3.5 space-y-1"
+        style={{ borderColor: t.cardBorder, backgroundColor: isDark ? 'rgba(59,130,246,0.05)' : 'rgba(59,130,246,0.04)' }}>
+        <div className="text-xs font-mono font-semibold" style={{ color: '#60a5fa' }}>
+          What are network references?
+        </div>
+        <div className="text-xs font-mono leading-relaxed" style={{ color: t.textMuted }}>
+          Reference monitors appear in a compact strip below your monitors and never trigger alerts.
+          Enable a mix of HTTP and DNS/ICMP targets to quickly tell whether an outage is yours or a broader internet issue.
+        </div>
+      </div>
+
+      {/* HTTP presets */}
+      <PresetSection
+        title="HTTP Endpoints"
+        presets={httpPresets}
+        enabled={networkRefsEnabled}
+        onToggle={togglePreset}
+        t={t}
+        isDark={isDark}
+      />
+
+      {/* ICMP / DNS presets */}
+      <PresetSection
+        title="DNS / ICMP Ping"
+        presets={icmpPresets}
+        enabled={networkRefsEnabled}
+        onToggle={togglePreset}
+        t={t}
+        isDark={isDark}
+      />
+
+      {/* Custom references */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: t.cardBorder }}>
+        <div
+          className="px-5 py-3 border-b"
+          style={{ backgroundColor: rowBg, borderColor: t.cardBorder }}>
+          <div className="text-xs font-mono font-semibold uppercase tracking-wider" style={{ color: t.textSecondary }}>
+            Custom
+          </div>
+          <div className="text-xs font-mono mt-0.5" style={{ color: t.textMuted }}>
+            Add any URL or IP — useful for routers, local servers, or private hosts
+          </div>
+        </div>
+
+        <div className="px-5 py-4 space-y-3" style={{ backgroundColor: t.cardBg }}>
+          {/* Existing custom entries */}
+          {networkRefsCustom.length > 0 && (
+            <div className="space-y-2">
+              {networkRefsCustom.map(entry => (
+                <div
+                  key={entry.target}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg border"
+                  style={{ borderColor: t.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}>
+                  <span
+                    className="shrink-0 text-xs font-mono px-1.5 py-0.5 rounded border uppercase tracking-wide"
+                    style={{ color: t.textFaint, borderColor: t.cardBorder, fontSize: 10 }}>
+                    {entry.checkType}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-mono font-medium truncate" style={{ color: t.textPrimary }}>{entry.label}</div>
+                    <div className="text-xs font-mono truncate" style={{ color: t.textMuted }}>{entry.target}</div>
+                  </div>
+                  <button
+                    onClick={() => removeCustom(entry.target)}
+                    className="shrink-0 opacity-40 hover:opacity-100 transition-opacity"
+                    style={{ color: t.textMuted }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add form */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 items-end">
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider mb-1" style={{ color: t.textMuted }}>
+                  Label
+                </label>
+                <input
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addCustom()}
+                  placeholder="My Router"
+                  className={`w-full ${inCls}`}
+                  style={inStyle}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider mb-1" style={{ color: t.textMuted }}>
+                  Target
+                </label>
+                <input
+                  value={newTarget}
+                  onChange={e => setNewTarget(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addCustom()}
+                  placeholder="192.168.1.1"
+                  className={`w-full ${inCls}`}
+                  style={inStyle}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider mb-1" style={{ color: t.textMuted }}>
+                  Type
+                </label>
+                <select
+                  value={newType}
+                  onChange={e => setNewType(e.target.value)}
+                  className={inCls}
+                  style={{ ...inStyle, cursor: 'pointer' }}>
+                  <option value="http">HTTP</option>
+                  <option value="icmp">ICMP</option>
+                </select>
+              </div>
+              <div>
+                <button
+                  onClick={addCustom}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-mono font-bold transition-all"
+                  style={{
+                    background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                    color:      '#fff',
+                    boxShadow:  '0 2px 8px rgba(59,130,246,0.3)',
+                    whiteSpace: 'nowrap',
+                  }}>
+                  <Plus size={12} /> Add
+                </button>
+              </div>
+            </div>
+            {addError && (
+              <div className="flex items-center gap-1.5 text-xs font-mono text-red-400">
+                <AlertCircle size={11} className="shrink-0" />
+                {addError}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PresetSection({ title, presets, enabled, onToggle, t, isDark }) {
+  const rowBg = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+
+  return (
+    <div className="rounded-xl border overflow-hidden" style={{ borderColor: t.cardBorder }}>
+      <div
+        className="px-5 py-3 border-b"
+        style={{ backgroundColor: rowBg, borderColor: t.cardBorder }}>
+        <div className="text-xs font-mono font-semibold uppercase tracking-wider" style={{ color: t.textSecondary }}>
+          {title}
+        </div>
+      </div>
+      <div style={{ backgroundColor: t.cardBg }}>
+        {presets.map((preset, i) => {
+          const isOn   = enabled.includes(preset.target);
+          const isLast = i === presets.length - 1;
+          return (
+            <div
+              key={preset.target}
+              className="flex items-center gap-3 px-5 py-3"
+              style={{ borderBottom: isLast ? 'none' : `1px solid ${t.cardBorder}` }}>
+              {preset.checkType === 'http'
+                ? <Globe    size={13} style={{ color: t.textFaint, flexShrink: 0 }} />
+                : <Terminal size={13} style={{ color: t.textFaint, flexShrink: 0 }} />
+              }
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-mono font-medium" style={{ color: t.textPrimary }}>{preset.label}</div>
+                <div className="text-xs font-mono" style={{ color: t.textMuted }}>{preset.target}</div>
+              </div>
+              <Toggle enabled={isOn} onToggle={() => onToggle(preset.target)} isDark={isDark} />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

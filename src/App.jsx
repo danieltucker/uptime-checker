@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Radio, Activity, AlertTriangle, Sun, Moon, Bell, Tag as TagIcon, Settings, Code, X, Menu } from 'lucide-react';
 import {
   DndContext, closestCenter,
@@ -56,14 +56,6 @@ function SortableMonitorCard({ monitor, onEdit, onDelete, onEmbed, width, onSetW
     </div>
   );
 }
-
-// ── Reference monitors seeded on first load ───────────────────────────────────
-const REFERENCE_SEEDS = [
-  { label: 'Google',        target: 'https://www.google.com',      checkType: 'http', interval: 60, tags: ['_ref'], alertTypes: ['None'], description: 'Network reference' },
-  { label: 'Cloudflare DNS',target: '1.1.1.1',                     checkType: 'icmp', interval: 60, tags: ['_ref'], alertTypes: ['None'], description: 'Network reference' },
-  { label: 'Google DNS',    target: '8.8.8.8',                     checkType: 'icmp', interval: 60, tags: ['_ref'], alertTypes: ['None'], description: 'Network reference' },
-  { label: 'Cloudflare',   target: 'https://www.cloudflare.com',   checkType: 'http', interval: 60, tags: ['_ref'], alertTypes: ['None'], description: 'Network reference' },
-];
 
 const HISTORY_OPTIONS = [
   { label: '1h',  value: '1h'  },
@@ -131,20 +123,6 @@ export default function App() {
     try { localStorage.setItem('wt-chart-y-max', val); }
     catch {}
   };
-
-  const seededRef = useRef(false);
-
-  // ── Seed reference monitors once after initial load ───────────────────────
-  useEffect(() => {
-    if (loading || error || seededRef.current) return;
-    seededRef.current = true;
-    const existing = new Set(monitors.map(m => m.target));
-    for (const seed of REFERENCE_SEEDS) {
-      if (!existing.has(seed.target)) {
-        addMonitor(seed).catch(console.error);
-      }
-    }
-  }, [loading, error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Persist history window choice ─────────────────────────────────────────
   useEffect(() => {
@@ -279,7 +257,7 @@ export default function App() {
             </span>
             <span className="hidden sm:inline text-xs font-mono px-2 py-0.5 rounded border"
               style={{ color: t.textFaint, borderColor: t.cardBorder }}>
-              watchtower · v5.0
+              watchtower · v5.1
             </span>
           </div>
 

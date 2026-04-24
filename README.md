@@ -7,7 +7,7 @@ WatchTower makes real HTTP(S), TCP, and ICMP checks on configurable intervals, s
 Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing APIs and websites just as well as internal services like a Plex server, a NAS, a database port, or a self-hosted app behind a reverse proxy.
 
 ![Status: Active](https://img.shields.io/badge/status-active-brightgreen)
-![Version](https://img.shields.io/badge/version-5.0-blue)
+![Version](https://img.shields.io/badge/version-5.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ![WatchTower dashboard](images/screenshot.png)
@@ -23,7 +23,7 @@ Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing
 - **Detailed HTTP timing** - DNS, TCP, TLS, and TTFB measured and displayed separately
 - **SSL certificate monitoring** - days until expiry shown on every HTTPS monitor
 - **Summary bar** - total monitors, online/offline count, and average ping at a glance
-- **Network Reference strip** - Google, Cloudflare (1.1.1.1), Google DNS (8.8.8.8), and Cloudflare.com auto-seeded on first run so you can tell at a glance whether an outage is yours or theirs
+- **Network Reference strip** - configurable set of external monitors (HTTP endpoints and DNS/ICMP targets) that appear below your main monitors so you can tell at a glance whether an outage is yours or a broader internet issue; never trigger alerts
 
 ### Organization
 - **Tags** - freeform labels with autocomplete; filter the grid by one or more tags (OR logic)
@@ -50,10 +50,11 @@ Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing
 - **Email client compatibility** - inline styles, `bgcolor` HTML attributes for Outlook 2007–2019, and `color-scheme: light` meta to prevent dark-mode inversion in Gmail and Apple Mail
 
 ### Settings
-- **Tabbed settings panel** - centered modal with General, Notifications, Reports, and Modules tabs
+- **Tabbed settings panel** - centered modal with General, Notifications, Reports, Network, and Modules tabs
 - **General tab** - dashboard-wide preferences including grouped vs flat view toggle
 - **Filtered channels** - per-monitor alert picker only shows channels enabled in Settings; incomplete credentials block save with an error
 - **Reports tab** - schedule configuration, tag filter, last-sent timestamp, and test send button; save is blocked if SMTP is not yet configured
+- **Network tab** - manage network reference monitors; toggle any of 14 preset endpoints on/off (8 HTTP, 6 DNS/ICMP) and add unlimited custom entries; changes sync immediately on save
 
 ### Embed
 - **Per-monitor widget** - 360x230 iframe showing a single card with live updates
@@ -330,8 +331,9 @@ watchtower/
 ├── images/                          # README screenshots
 ├── src/                             # React frontend
 │   ├── main.jsx                     # Entry point - embed path detection, ThemeProvider
-│   ├── App.jsx                      # Root layout, tag filter, alert tracking, seeding
+│   ├── App.jsx                      # Root layout, tag filter, alert tracking
 │   ├── types/monitor.js             # Monitor schema + formatters
+│   ├── types/networkRefs.js         # Network reference presets + default enabled list
 │   ├── hooks/
 │   │   ├── useMonitors.js           # REST + SSE state layer
 │   │   └── useTheme.jsx             # Dark/light theme context + token sets
@@ -367,6 +369,18 @@ watchtower/
 ---
 
 ## Changelog
+
+### v5.1.0
+
+#### Network Reference Settings
+
+Network reference monitors are now fully configurable from **Settings > Network** instead of being hardcoded at startup.
+
+- **14 built-in presets** — 8 HTTP endpoints (Google, Cloudflare, Microsoft, Apple, Amazon, GitHub, Discord, Slack) and 6 DNS/ICMP targets (Cloudflare DNS 1.1.1.1, Google DNS 8.8.8.8, Quad9, OpenDNS, Level3 DNS, Alibaba DNS)
+- **Toggle any preset on or off** — only the monitors you enable appear in the reference strip; the default set matches the four monitors previously seeded automatically (Google, Cloudflare, Cloudflare DNS, Google DNS)
+- **Custom references** — add any HTTP URL or IP address with a label and check type (HTTP or ICMP); useful for routers, local servers, or any private host you want visible in the strip
+- **Instant sync** — saving the Network tab creates or deletes reference monitors immediately; no restart required
+- **Existing installs migrate cleanly** — the four previously auto-seeded monitors remain active and are reflected as enabled in the new UI; no duplicates are created on first save
 
 ### v5.0.0
 
