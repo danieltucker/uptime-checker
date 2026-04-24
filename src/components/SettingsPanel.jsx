@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2, Plus, Wifi, Globe, Terminal, Palette } from 'lucide-react';
-import { useTheme } from '../hooks/useTheme';
+import { useTheme, THEMES } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
 import { NETWORK_REF_PRESETS, DEFAULT_NETWORK_REFS_ENABLED } from '../types/networkRefs.js';
 
@@ -39,8 +39,8 @@ const CHANNEL_VALIDATION = [
 // ── SettingsPanel ─────────────────────────────────────────────────────────────
 
 export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange }) {
-  const { t, isDark, themeMode, setThemeMode } = useTheme();
-  const [activeTab,        setActiveTab]        = useState('general');
+  const { t, isDark, themeMode, setThemeMode, themeName, setThemeName } = useTheme();
+  const [activeTab,        setActiveTab]        = useState('appearance');
   const [mobileContentOpen, setMobileContentOpen] = useState(false);
   const [settings,      setSettings]      = useState(DEFAULT_SETTINGS);
   const [moduleSettings, setModuleSettings] = useState({});  // module.* keys
@@ -380,6 +380,8 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
               <AppearanceTab
                 themeMode={themeMode}
                 setThemeMode={setThemeMode}
+                themeName={themeName}
+                setThemeName={setThemeName}
                 isDark={isDark}
                 t={t}
               />
@@ -1249,11 +1251,68 @@ const THEME_OPTIONS = [
   { value: 'dark',  label: 'Dark'  },
 ];
 
-function AppearanceTab({ themeMode, setThemeMode, isDark, t }) {
+function ThemeSwatch({ name, theme, isActive, onClick }) {
+  const preview = theme.dark;
   return (
-    <div className="space-y-3">
+    <button
+      onClick={onClick}
+      className="text-left rounded-lg border-2 p-2.5 transition-all"
+      style={{
+        borderColor:     isActive ? '#60a5fa' : preview.cardBorder,
+        backgroundColor: preview.pageBg,
+        outline:         isActive ? '1px solid #60a5fa' : 'none',
+        outlineOffset:   '1px',
+      }}>
+      {/* Mini card preview */}
+      <div
+        className="rounded mb-2 overflow-hidden"
+        style={{ height: '32px', backgroundColor: preview.pageBg, padding: '4px' }}>
+        <div
+          className="rounded h-full flex items-center gap-1 px-2"
+          style={{ backgroundColor: preview.cardBg }}>
+          <div className="rounded-full shrink-0" style={{ width: '6px', height: '6px', backgroundColor: preview.textPrimary }} />
+          <div className="rounded flex-1" style={{ height: '3px', backgroundColor: preview.textSecondary }} />
+          <div className="rounded shrink-0" style={{ width: '12px', height: '3px', backgroundColor: preview.textMuted }} />
+        </div>
+      </div>
+      {/* Label */}
+      <div
+        className="text-xs font-mono"
+        style={{ color: isActive ? '#60a5fa' : preview.textSecondary }}>
+        {theme.label}
+      </div>
+    </button>
+  );
+}
+
+function AppearanceTab({ themeMode, setThemeMode, themeName, setThemeName, isDark, t }) {
+  return (
+    <div className="space-y-5">
+      {/* Theme picker */}
+      <div>
+        <div className="text-xs font-mono font-medium mb-1" style={{ color: t.textPrimary }}>Color theme</div>
+        <div className="text-xs font-mono mb-3" style={{ color: t.textMuted }}>
+          Each theme has a dark and light variant — the mode selector below determines which is shown.
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {Object.entries(THEMES).map(([name, theme]) => (
+            <ThemeSwatch
+              key={name}
+              name={name}
+              theme={theme}
+              isActive={themeName === name}
+              onClick={() => setThemeName(name)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="h-px" style={{ backgroundColor: t.cardBorder }} />
+
+      {/* Mode selector */}
       <SettingRow
-        title="Theme"
+        title="Mode"
         description="Choose light or dark, or let WatchTower follow your operating system setting."
         t={t}
         isDark={isDark}>

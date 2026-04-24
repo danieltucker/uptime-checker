@@ -4,6 +4,22 @@ All notable changes to WatchTower are documented here.
 
 ---
 
+## v5.3.0
+
+### Theme system
+
+- **6 themes** selectable in Settings > Appearance — Default, Midnight, Terminal, Ocean, Nord, and Mocha
+- Each theme ships with a **dark and light variant**; the mode selector (Light / Auto / Dark) determines which variant is shown — themes and mode are independent choices
+- **Theme swatch picker** in the Appearance tab — a 2×3 grid of cards, each with a mini card preview showing the theme's color palette; active theme has a blue ring; selection applies instantly
+- Themes are stored in localStorage as `wt-theme-name`; existing installs default to Default
+- **Midnight** — near-black deep blue base; cool blue-white text; dramatically deeper than Default
+- **Terminal** — true black background; phosphor green (`#33ff33`) primary text; light variant uses warm cream paper with dark pine green text
+- **Ocean** — deep navy base; cool blue-white text; light variant is coastal mist with pale blue-grey backgrounds
+- **Nord** — the classic Nord palette (Polar Night bases, Snow Storm text); light variant uses the Nord snow-storm greys
+- **Mocha** — rich espresso browns; warm cream/ivory text; light variant is warm parchment with dark espresso text
+
+---
+
 ## v5.2.0
 
 ### Appearance settings
