@@ -18,11 +18,18 @@
 
 import { execFile }   from 'node:child_process';
 import { promisify }  from 'node:util';
+import { assertNotSsrfTarget } from './ssrf-guard.js';
 
 const execFileAsync = promisify(execFile);
 const IS_WIN        = process.platform === 'win32';
 
 export async function icmpCheck(target) {
+  try {
+    await assertNotSsrfTarget(target);
+  } catch (err) {
+    return { status: 'down', error: err.message };
+  }
+
   const [bin, args] = IS_WIN
     ? ['ping', ['-n', '1', '-w', '5000', target]]
     : ['ping', ['-c', '1', '-W', '5',    target]];

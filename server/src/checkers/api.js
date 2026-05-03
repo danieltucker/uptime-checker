@@ -8,6 +8,7 @@
 
 import got        from 'got';
 import sslChecker from 'ssl-checker';
+import { assertNotSsrfTarget } from './ssrf-guard.js';
 
 const BODY_SIZE_LIMIT = 256 * 1024; // 256 KB
 
@@ -39,6 +40,12 @@ export async function apiCheck(monitor) {
   let hostname;
   try { hostname = new URL(url).hostname; } catch {
     return { status: 'down', error: `Invalid URL: ${url}` };
+  }
+
+  try {
+    await assertNotSsrfTarget(hostname);
+  } catch (err) {
+    return { status: 'down', error: err.message };
   }
 
   // SSL cert check in parallel — best-effort, never blocks the ping

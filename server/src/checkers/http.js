@@ -17,6 +17,7 @@
 
 import got        from 'got';
 import sslChecker from 'ssl-checker';
+import { assertNotSsrfTarget } from './ssrf-guard.js';
 
 const safe = (v) =>
   v != null && !Number.isNaN(v) ? Math.max(0, Math.round(v)) : null;
@@ -27,6 +28,12 @@ export async function httpCheck(target) {
   let hostname;
   try { hostname = new URL(url).hostname; } catch {
     return { status: 'down', error: `Invalid URL: ${url}` };
+  }
+
+  try {
+    await assertNotSsrfTarget(hostname);
+  } catch (err) {
+    return { status: 'down', error: err.message };
   }
 
   // Kick off SSL cert check in parallel — best-effort, never blocks the ping

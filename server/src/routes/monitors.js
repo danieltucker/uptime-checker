@@ -82,6 +82,8 @@ function buildMonitorPayload(id, window = '1h') {
   if (!row) return null;
 
   const monitor = rowToMonitor(row);
+  if (monitor.authPass)  monitor.authPass  = '***';
+  if (monitor.authToken) monitor.authToken = '***';
   // Parse alertConfig so the frontend gets a JS object, not a raw string
   let alertConfig = {};
   try { alertConfig = JSON.parse(monitor.alertConfig || '{}'); } catch {}
@@ -202,6 +204,12 @@ router.post('/', (req, res) => {
 
 // ── PUT /api/monitors/:id ─────────────────────────────────────────────────────
 
+function applyCredential(incoming, existing) {
+  if (incoming === '***') return existing;
+  if (incoming !== undefined) return incoming?.trim() || null;
+  return existing;
+}
+
 router.put('/:id', (req, res) => {
   const { id } = req.params;
   const existing = db.prepare('SELECT * FROM monitors WHERE id = ?').get(id);
@@ -232,8 +240,8 @@ router.put('/:id', (req, res) => {
     jsonExpected:      jsonExpected      !== undefined ? (jsonExpected?.trim()  || null) : existing.json_expected,
     authType:          authType          !== undefined ? (authType              || null) : existing.auth_type,
     authUser:          authUser          !== undefined ? (authUser?.trim()      || null) : existing.auth_user,
-    authPass:          authPass          !== undefined ? (authPass?.trim()      || null) : existing.auth_pass,
-    authToken:         authToken         !== undefined ? (authToken?.trim()     || null) : existing.auth_token,
+    authPass:          applyCredential(authPass,  existing.auth_pass),
+    authToken:         applyCredential(authToken, existing.auth_token),
     requestHeaders:    requestHeaders    !== undefined ? JSON.stringify(requestHeaders) : (existing.request_headers ?? '[]'),
   };
 

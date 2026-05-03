@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Eye, EyeOff, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2, Plus, Wifi, Globe, Terminal, Palette } from 'lucide-react';
+import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2, Plus, Wifi, Globe, Terminal, Palette } from 'lucide-react';
 import { useTheme, THEMES } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
 import { NETWORK_REF_PRESETS, DEFAULT_NETWORK_REFS_ENABLED } from '../types/networkRefs.js';
@@ -54,7 +54,6 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
   const [saveError,     setSaveError]     = useState('');
   const [invalidFields, setInvalidFields] = useState(new Set());
   const [testState,     setTestState]     = useState({});
-  const [showPass,      setShowPass]      = useState({});
 
   useEffect(() => {
     fetch('/api/settings')
@@ -117,7 +116,6 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
       return next;
     });
   };
-  const toggleShow = (key) => setShowPass(p => ({ ...p, [key]: !p[key] }));
 
   const save = async () => {
     // Validate: every enabled channel must have all required fields filled
@@ -221,10 +219,13 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
   const test = async (channel) => {
     setTestState(s => ({ ...s, [channel]: 'loading' }));
     try {
+      const overrides = Object.fromEntries(
+        Object.entries(settings).filter(([, v]) => v !== '***')
+      );
       const res = await fetch(`/api/settings/test/${channel}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(settings),
+        body:    JSON.stringify(overrides),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Test failed');
@@ -432,8 +433,6 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
               <NotificationsTab
                 settings={settings}
                 set={set}
-                showPass={showPass}
-                toggleShow={toggleShow}
                 testState={testState}
                 test={test}
                 inputCls={inputCls}
@@ -541,7 +540,7 @@ const SMTP_PRESETS = [
     note: 'iCloud requires an App-Specific Password. Generate one at appleid.apple.com → Sign-In and Security → App-Specific Passwords.' },
 ];
 
-function NotificationsTab({ settings, set, showPass, toggleShow, testState, test, inputCls, inputStyle, invalidFields, t, isDark }) {
+function NotificationsTab({ settings, set, testState, test, inputCls, inputStyle, invalidFields, t, isDark }) {
   // Returns input style with red border when the field has a validation error
   const fs = (key) => invalidFields.has(key)
     ? { ...inputStyle, borderColor: '#ef4444', boxShadow: '0 0 0 2px rgba(239,68,68,0.15)' }
@@ -563,12 +562,11 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
         t={t}
         isDark={isDark}>
         <Field label="Bot Token" invalid={invalidFields.has('telegram_token')} t={t}>
-          <PasswordInput value={settings.telegram_token}
-            onChange={v => set('telegram_token', v)}
-            show={showPass.telegram_token}
-            onToggle={() => toggleShow('telegram_token')}
+          <input type="password"
+            value={settings.telegram_token}
+            onChange={e => set('telegram_token', e.target.value)}
             placeholder="123456:ABC-DEF..."
-            cls={inputCls} style={fs('telegram_token')} t={t} />
+            className={inputCls} style={fs('telegram_token')} />
         </Field>
         <Field label="Chat ID" invalid={invalidFields.has('telegram_chat_id')} t={t}>
           <input value={settings.telegram_chat_id}
@@ -650,12 +648,11 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
             className={inputCls} style={fs('email_smtp_user')} />
         </Field>
         <Field label="Password / App Password" invalid={invalidFields.has('email_smtp_pass')} t={t}>
-          <PasswordInput value={settings.email_smtp_pass}
-            onChange={v => set('email_smtp_pass', v)}
-            show={showPass.email_smtp_pass}
-            onToggle={() => toggleShow('email_smtp_pass')}
+          <input type="password"
+            value={settings.email_smtp_pass}
+            onChange={e => set('email_smtp_pass', e.target.value)}
             placeholder="••••••••••••••••"
-            cls={inputCls} style={fs('email_smtp_pass')} t={t} />
+            className={inputCls} style={fs('email_smtp_pass')} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="From" invalid={invalidFields.has('email_from')} t={t}>
@@ -690,12 +687,11 @@ function NotificationsTab({ settings, set, showPass, toggleShow, testState, test
             className={inputCls} style={fs('twilio_account_sid')} />
         </Field>
         <Field label="Auth Token" invalid={invalidFields.has('twilio_auth_token')} t={t}>
-          <PasswordInput value={settings.twilio_auth_token}
-            onChange={v => set('twilio_auth_token', v)}
-            show={showPass.twilio_auth_token}
-            onToggle={() => toggleShow('twilio_auth_token')}
+          <input type="password"
+            value={settings.twilio_auth_token}
+            onChange={e => set('twilio_auth_token', e.target.value)}
             placeholder="••••••••••••••••"
-            cls={inputCls} style={fs('twilio_auth_token')} t={t} />
+            className={inputCls} style={fs('twilio_auth_token')} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="From Number" invalid={invalidFields.has('twilio_from')} t={t}>
@@ -967,15 +963,13 @@ function ModulesTab({ moduleSettings, onSaveModuleSettings, moduleSaving, module
 
 function ModuleSection({ mod, localValues, saving, saved, onSave, t, isDark }) {
   const [fields, setFields] = useState({ ...localValues });
-  const [showPass, setShowPass] = useState({});
 
   // Sync when async-loaded settings arrive after initial render
   useEffect(() => {
     setFields({ ...localValues });
   }, [JSON.stringify(localValues)]);
 
-  const setField    = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
-  const toggleShow  = (k)    => setShowPass(prev => ({ ...prev, [k]: !prev[k] }));
+  const setField = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
 
   const inputCls   = 'w-full rounded-lg border px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/60 transition-all';
   const inputStyle = { backgroundColor: t.inputBg, color: t.textPrimary, borderColor: t.cardBorder };
@@ -1018,32 +1012,14 @@ function ModuleSection({ mod, localValues, saving, saved, onSave, t, isDark }) {
                   style={{ color: t.textMuted }}>
                   {field.label}{field.required ? ' *' : ''}
                 </label>
-                {field.type === 'password' ? (
-                  <div className="relative">
-                    <input
-                      type={showPass[field.key] ? 'text' : 'password'}
-                      value={fields[field.key] ?? ''}
-                      onChange={e => setField(field.key, e.target.value)}
-                      placeholder={field.placeholder ?? ''}
-                      className={inputCls}
-                      style={{ ...inputStyle, paddingRight: '2.75rem' }}
-                    />
-                    <button type="button" onClick={() => toggleShow(field.key)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-80"
-                      style={{ color: t.textSecondary }}>
-                      {showPass[field.key] ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                ) : (
-                  <input
-                    type="text"
-                    value={fields[field.key] ?? ''}
-                    onChange={e => setField(field.key, e.target.value)}
-                    placeholder={field.placeholder ?? ''}
-                    className={inputCls}
-                    style={inputStyle}
-                  />
-                )}
+                <input
+                  type={field.type === 'password' ? 'password' : 'text'}
+                  value={fields[field.key] ?? ''}
+                  onChange={e => setField(field.key, e.target.value)}
+                  placeholder={field.placeholder ?? ''}
+                  className={inputCls}
+                  style={inputStyle}
+                />
                 {field.hint && (
                   <p className="text-xs font-mono mt-1 leading-relaxed" style={{ color: t.textFaint }}>
                     {field.hint}
@@ -1217,28 +1193,6 @@ function Field({ label, invalid = false, children, t }) {
         {label}{invalid && <span className="ml-1 normal-case tracking-normal">— required</span>}
       </label>
       {children}
-    </div>
-  );
-}
-
-function PasswordInput({ value, onChange, show, onToggle, placeholder, cls, style, t }) {
-  return (
-    <div className="relative">
-      <input
-        type={show ? 'text' : 'password'}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={cls}
-        style={{ ...style, paddingRight: '2.75rem' }}
-      />
-      <button
-        type="button"
-        onClick={onToggle}
-        className="absolute right-3 top-1/2 -translate-y-1/2 transition-opacity opacity-40 hover:opacity-80"
-        style={{ color: t.textSecondary }}>
-        {show ? <EyeOff size={14} /> : <Eye size={14} />}
-      </button>
     </div>
   );
 }

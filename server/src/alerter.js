@@ -14,6 +14,7 @@
 import got        from 'got';
 import nodemailer from 'nodemailer';
 import { getSetting } from './db/index.js';
+import { assertNotSsrfTarget } from './checkers/ssrf-guard.js';
 
 // ── Message formatting ────────────────────────────────────────────────────────
 
@@ -135,6 +136,12 @@ export async function sendTwilioAlert(monitor, event, overrides = {}) {
 export async function sendWebhookAlert(monitor, event, overrides = {}) {
   const url = overrides.webhook_url ?? getSetting('webhook_url');
   if (!url?.trim()) throw new Error('Webhook URL is not configured');
+
+  let webhookHostname;
+  try { webhookHostname = new URL(url.trim()).hostname; } catch {
+    throw new Error('Invalid webhook URL');
+  }
+  await assertNotSsrfTarget(webhookHostname);
 
   await got.post(url.trim(), {
     json: {

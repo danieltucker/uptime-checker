@@ -18,15 +18,29 @@ const KNOWN_KEYS = [
   'network_refs_enabled', 'network_refs_custom',
 ];
 
+const SECRET_KEYS = new Set([
+  'telegram_token', 'email_smtp_pass', 'twilio_auth_token',
+  'twilio_account_sid', 'webhook_url',
+]);
+
+function isModuleSecret(key) {
+  const field = key.split('.').slice(2).join('.');
+  return field.endsWith('_token') || field.endsWith('_key') || field.endsWith('_secret');
+}
+
 // ── GET /api/settings ─────────────────────────────────────────────────────────
 
 router.get('/', (_req, res) => {
   const stored = getAllSettings();
   const result = {};
-  for (const key of KNOWN_KEYS) result[key] = stored[key] ?? '';
-  // Also return any module.* keys that exist in the DB
+  for (const key of KNOWN_KEYS) {
+    const val = stored[key] ?? '';
+    result[key] = (SECRET_KEYS.has(key) && val) ? '***' : val;
+  }
   for (const [key, value] of Object.entries(stored)) {
-    if (key.startsWith('module.')) result[key] = value;
+    if (key.startsWith('module.')) {
+      result[key] = (isModuleSecret(key) && value) ? '***' : value;
+    }
   }
   res.json(result);
 });
@@ -39,11 +53,10 @@ const READ_ONLY_KEYS = new Set(['report_last_sent']);
 router.put('/', (req, res) => {
   for (const key of KNOWN_KEYS) {
     if (READ_ONLY_KEYS.has(key)) continue;
-    if (key in req.body) setSetting(key, req.body[key]);
+    if (key in req.body && req.body[key] !== '***') setSetting(key, req.body[key]);
   }
-  // Also persist any module.* keys
   for (const [key, value] of Object.entries(req.body)) {
-    if (key.startsWith('module.')) setSetting(key, value);
+    if (key.startsWith('module.') && value !== '***') setSetting(key, value);
   }
   res.json({ ok: true });
 });
