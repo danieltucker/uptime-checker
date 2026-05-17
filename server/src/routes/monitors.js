@@ -7,6 +7,9 @@ import { broadcast }                    from '../sse.js';
 
 const router = Router();
 
+const ALLOWED_CHECK_TYPES = new Set(['http', 'tcp', 'icmp', 'api']);
+const MIN_INTERVAL_S = 30;
+
 // ── Window config ─────────────────────────────────────────────────────────────
 // lookback: SQLite datetime modifier
 // bucketMinutes: null = return raw points; number = aggregate into N-min buckets
@@ -158,6 +161,15 @@ router.post('/', (req, res) => {
 
   if (!target?.trim()) return res.status(400).json({ error: '`target` is required' });
 
+  const parsedInterval = Number(interval);
+  if (!Number.isInteger(parsedInterval) || parsedInterval < MIN_INTERVAL_S) {
+    return res.status(400).json({ error: `\`interval\` must be an integer ≥ ${MIN_INTERVAL_S} seconds` });
+  }
+
+  if (!ALLOWED_CHECK_TYPES.has(checkType)) {
+    return res.status(400).json({ error: `Invalid \`checkType\`; must be one of: ${[...ALLOWED_CHECK_TYPES].join(', ')}` });
+  }
+
   const id = randomUUID();
 
   db.prepare(`
@@ -222,6 +234,17 @@ router.put('/:id', (req, res) => {
     expectedStatus, jsonPath, jsonExpected,
     authType, authUser, authPass, authToken, requestHeaders,
   } = req.body;
+
+  if (interval !== undefined) {
+    const parsedInterval = Number(interval);
+    if (!Number.isInteger(parsedInterval) || parsedInterval < MIN_INTERVAL_S) {
+      return res.status(400).json({ error: `\`interval\` must be an integer ≥ ${MIN_INTERVAL_S} seconds` });
+    }
+  }
+
+  if (checkType !== undefined && !ALLOWED_CHECK_TYPES.has(checkType)) {
+    return res.status(400).json({ error: `Invalid \`checkType\`; must be one of: ${[...ALLOWED_CHECK_TYPES].join(', ')}` });
+  }
 
   const next = {
     label:             label             ?? existing.label,

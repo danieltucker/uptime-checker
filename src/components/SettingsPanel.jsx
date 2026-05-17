@@ -38,7 +38,7 @@ const CHANNEL_VALIDATION = [
 
 // ── SettingsPanel ─────────────────────────────────────────────────────────────
 
-export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, chartYMax = 'auto', onChartYMaxChange }) {
+export function SettingsPanel({ onClose, chartYMax = 'auto', onChartYMaxChange }) {
   const { t, isDark, themeMode, setThemeMode, themeName, setThemeName } = useTheme();
   const [activeTab,        setActiveTab]        = useState('appearance');
   const [mobileContentOpen, setMobileContentOpen] = useState(false);
@@ -389,8 +389,6 @@ export function SettingsPanel({ onClose, viewMode = 'flat', onViewModeChange, ch
             )}
             {activeTab === 'general' && (
               <GeneralTab
-                viewMode={viewMode}
-                onViewModeChange={onViewModeChange}
                 chartYMax={chartYMax}
                 onChartYMaxChange={onChartYMaxChange}
                 t={t}
@@ -493,21 +491,9 @@ const CHART_Y_OPTIONS = [
   { label: '750ms',  value: '750'  },
 ];
 
-function GeneralTab({ viewMode, onViewModeChange, chartYMax, onChartYMaxChange, t, isDark }) {
+function GeneralTab({ chartYMax, onChartYMaxChange, t, isDark }) {
   return (
     <div className="space-y-3">
-      <SettingRow
-        title="Grouped view"
-        description="Collapse monitors sharing a tag into a single summary card. Click a group to expand individual monitors."
-        t={t}
-        isDark={isDark}>
-        <Toggle
-          enabled={viewMode === 'grouped'}
-          onToggle={v => onViewModeChange?.(v ? 'grouped' : 'flat')}
-          isDark={isDark}
-        />
-      </SettingRow>
-
       <SettingRow
         title="Chart scale"
         description="Maximum ping value shown on all graphs. Auto adjusts to your data; a fixed value lets you compare monitors side by side on the same scale."

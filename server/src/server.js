@@ -16,9 +16,26 @@ const PORT      = process.env.PORT ?? 3000;
 const app = express();
 app.use(express.json());
 
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 // Static frontend (built by `npm run build` at repo root → dist/ → copied to server/public/)
 const PUBLIC_DIR = join(__dirname, '../public');
 app.use(express.static(PUBLIC_DIR));
+
+// Reject mutating API requests that don't declare JSON content-type (CSRF mitigation)
+app.use('/api', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    const ct = req.headers['content-type'] ?? '';
+    if (!ct.startsWith('application/json')) {
+      return res.status(415).json({ error: 'Content-Type must be application/json' });
+    }
+  }
+  next();
+});
 
 // ── Load modules (async dynamic imports) ──────────────────────────────────────
 await loadModules();

@@ -66,7 +66,19 @@ router.put('/', (req, res) => {
 
 const TEST_MONITOR = { id: 'test', label: 'Test Monitor', target: 'watchtower.test', alertTypes: [] };
 
+const testLastSent = new Map();
+const TEST_RATE_LIMIT_MS = 30_000;
+
 router.post('/test/:channel', async (req, res) => {
+  const channel = req.params.channel;
+  const now = Date.now();
+  const last = testLastSent.get(channel) ?? 0;
+  if (now - last < TEST_RATE_LIMIT_MS) {
+    const waitSec = Math.ceil((TEST_RATE_LIMIT_MS - (now - last)) / 1000);
+    return res.status(429).json({ error: `Please wait ${waitSec}s before testing again` });
+  }
+  testLastSent.set(channel, now);
+
   const overrides = req.body ?? {};
   try {
     switch (req.params.channel) {

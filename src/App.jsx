@@ -100,23 +100,12 @@ export default function App() {
   const [embedMonitor,    setEmbedMonitor]    = useState(null);
   const [editingInstance, setEditingInstance] = useState(null);  // module instance being edited
   const [mobileMenuOpen,  setMobileMenuOpen]  = useState(false);
-  const [viewMode,       setViewMode]       = useState(() => {
-    try { return localStorage.getItem('wt-view-mode') || 'flat'; }
-    catch { return 'flat'; }
-  });
-
   const [chartYMax, setChartYMax] = useState(() => {
     try { return localStorage.getItem('wt-chart-y-max') || 'auto'; }
     catch { return 'auto'; }
   });
 
   const { moveCard, sortMonitors, getWidth, setWidth } = useCardLayout();
-
-  const handleViewModeChange = (mode) => {
-    setViewMode(mode);
-    try { localStorage.setItem('wt-view-mode', mode); }
-    catch {}
-  };
 
   const handleChartYMaxChange = (val) => {
     setChartYMax(val);
@@ -556,8 +545,6 @@ export default function App() {
       {showSettings && (
         <SettingsPanel
           onClose={() => setShowSettings(false)}
-          viewMode={viewMode}
-          onViewModeChange={handleViewModeChange}
           chartYMax={chartYMax}
           onChartYMaxChange={handleChartYMaxChange}
         />

@@ -18,6 +18,15 @@ import { assertNotSsrfTarget } from './checkers/ssrf-guard.js';
 
 // ── Message formatting ────────────────────────────────────────────────────────
 
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function subject(monitor, event) {
   const label = {
     down:      'DOWN',
@@ -44,14 +53,14 @@ function htmlBody(monitor, event) {
     recovered: 'RECOVERED',
   }[event] ?? event.toUpperCase();
   const detail = event === 'degraded' && monitor.degradedThreshold
-    ? `<div>Threshold: <span style="color:#e6edf3">${monitor.degradedThreshold}ms</span></div>`
+    ? `<div>Threshold: <span style="color:#e6edf3">${escHtml(String(monitor.degradedThreshold))}ms</span></div>`
     : '';
   return `
     <div style="font-family:monospace;max-width:480px;padding:24px;background:#0d1117;color:#e6edf3;border-radius:8px">
       <div style="font-size:11px;letter-spacing:0.1em;color:#6e7681;margin-bottom:16px">WATCHTOWER ALERT</div>
-      <div style="font-size:20px;font-weight:bold;color:${color};margin-bottom:12px">${monitor.label} is ${status}</div>
+      <div style="font-size:20px;font-weight:bold;color:${color};margin-bottom:12px">${escHtml(monitor.label)} is ${status}</div>
       <div style="font-size:13px;color:#8d96a0;line-height:1.6">
-        <div>Target: <span style="color:#e6edf3">${monitor.target}</span></div>
+        <div>Target: <span style="color:#e6edf3">${escHtml(monitor.target)}</span></div>
         ${detail}
         <div>Time: <span style="color:#e6edf3">${new Date().toLocaleString()}</span></div>
       </div>

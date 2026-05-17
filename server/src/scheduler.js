@@ -179,7 +179,7 @@ export async function executeCheck(monitor) {
     ttfbMs:     result.ttfbMs     ?? null,
     httpStatus: result.httpStatus ?? null,
     certDays:   result.certDays   ?? null,
-    error:      result.error      ?? null,
+    error:      result.error ? result.error.slice(0, 256) : null,
   });
 
   // Rolling uptime % from the last 50 results (used for SSE payload)

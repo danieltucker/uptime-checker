@@ -51,7 +51,7 @@ Run it on a Raspberry Pi, a home server, or a cheap VPS. It tracks public-facing
 
 ### Settings
 - **Tabbed settings panel** - centered modal with General, Notifications, Reports, Network, and Modules tabs
-- **General tab** - dashboard-wide preferences including grouped vs flat view toggle
+- **General tab** - dashboard-wide preferences (chart Y-axis scale, theme)
 - **Filtered channels** - per-monitor alert picker only shows channels enabled in Settings; incomplete credentials block save with an error
 - **Reports tab** - schedule configuration, tag filter, last-sent timestamp, and test send button; save is blocked if SMTP is not yet configured
 - **Network tab** - manage network reference monitors; toggle any of 14 preset endpoints on/off (8 HTTP, 6 DNS/ICMP) and add unlimited custom entries; changes sync immediately on save
@@ -274,7 +274,7 @@ Embedded views receive live SSE updates and have no edit, delete, or settings co
 | GET    | `/api/events`                     | SSE stream of live check results                     |
 | GET    | `/api/settings`                   | Get alert channel configuration                      |
 | PUT    | `/api/settings`                   | Save alert channel configuration                     |
-| POST   | `/api/settings/test/:channel`     | Send a test alert (`telegram`, `email`, `twilio`, `report`) |
+| POST   | `/api/settings/test/:channel`     | Send a test alert (`telegram`, `email`, `twilio`, `webhook`, `report`) |
 
 ### Monitor schema
 
@@ -383,12 +383,6 @@ Tags become first-class objects on the dashboard. The default view collapses eac
 - **Tag summary cards** - each tag renders as one card showing the tag name, the names of its members, an aggregate status (worst status wins - one DOWN member makes the group DOWN), member count, and a combined uptime figure
 - **Expand on click** - clicking a tag card or its label replaces it in the grid with all the individual member cards; clicking again collapses them back
 - **Untagged items** - monitors and modules with no tags always appear individually and are not grouped
-- **View toggle** - a setting in the configuration panel switches between grouped view (default) and flat view (all cards shown individually, current behavior); persists across sessions
-
-#### Settings panel
-
-- **Left-side tab navigation** — navigates between General, Notifications, and one tab per installed module that requires credentials
-- **General tab** — dashboard-wide preferences including the grouped vs flat view toggle
 
 ---
 
