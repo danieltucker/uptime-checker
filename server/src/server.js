@@ -7,6 +7,9 @@ import monitorsRouter         from './routes/monitors.js';
 import settingsRouter         from './routes/settings.js';
 import alertsRouter           from './routes/alerts.js';
 import moduleInstancesRouter  from './routes/module-instances.js';
+import toolsRouter            from './routes/tools.js';
+import keysRouter             from './routes/keys.js';
+import v1Router               from './routes/v1.js';
 import { loadModules, registry } from './modules/registry.js';
 import { initReportScheduler }  from './report-scheduler.js';
 
@@ -51,10 +54,13 @@ for (const [id, def] of registry) {
 // ── API ───────────────────────────────────────────────────────────────────────
 
 app.get('/api/events',          sseHandler);
-app.use('/api/monitors',        monitorsRouter);
-app.use('/api/settings',        settingsRouter);
-app.use('/api/alerts',          alertsRouter);
+app.use('/api/monitors',         monitorsRouter);
+app.use('/api/settings',         settingsRouter);
+app.use('/api/alerts',           alertsRouter);
 app.use('/api/module-instances', moduleInstancesRouter);
+app.use('/api/tools',            toolsRouter);
+app.use('/api/keys',             keysRouter);
+app.use('/api/v1',               v1Router);
 
 // Fallback: let the React router handle all non-API paths
 app.get('*', (_req, res) => {

@@ -104,5 +104,17 @@ export function useMonitors(historyWindow = '1h') {
     setMonitors(prev => prev.filter(m => m.id !== id));
   }, []);
 
-  return { monitors, loading, error, addMonitor, updateMonitor, deleteMonitor };
+  const refresh = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return fetch(`/api/monitors?window=${historyWindow}`)
+      .then(r => {
+        if (!r.ok) throw new Error(`Server returned ${r.status}`);
+        return r.json();
+      })
+      .then(data => { setMonitors(data); setLoading(false); })
+      .catch(err  => { setError(err.message); setLoading(false); throw err; });
+  }, [historyWindow]);
+
+  return { monitors, loading, error, addMonitor, updateMonitor, deleteMonitor, refresh };
 }

@@ -16,7 +16,6 @@ const STATUS_STYLES = {
   pending:  { label: 'PENDING',  cls: 'text-gray-400  bg-gray-400/10  border-gray-400/30',  dot: false },
 };
 
-
 function StatusBadge({ status }) {
   const { label, cls, dot } = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
   return (
@@ -38,7 +37,6 @@ const TIMING_SEGMENTS = [
   { key: 'ttfbMs', label: 'TTFB', color: '#a78bfa' },
 ];
 
-// Tooltip content — pure, no portal logic here
 function SparkTooltipContent({ d, t }) {
   const isDown       = d.status === 'down';
   const total        = d.ping ?? 0;
@@ -106,8 +104,6 @@ function SparkTooltipContent({ d, t }) {
   );
 }
 
-// Portal wrapper — renders the tooltip into document.body so no ancestor
-// overflow or stacking-context can clip it.
 function SparkTooltip({ active, payload, coordinate, containerRef }) {
   const { t } = useTheme();
   if (!active || !payload?.length) return null;
@@ -117,8 +113,6 @@ function SparkTooltip({ active, payload, coordinate, containerRef }) {
   const rect  = containerRef?.current?.getBoundingClientRect();
   const pageX = rect ? rect.left + coordinate.x : coordinate.x;
   const pageY = rect ? rect.top  + coordinate.y : coordinate.y;
-
-  // Flip below the cursor when there isn't enough room above
   const above = pageY > 160;
 
   return createPortal(
@@ -215,26 +209,81 @@ function CheckTypeBadge({ checkType }) {
 }
 
 // ---------------------------------------------------------------------------
+// Ping metric cell — inverted bar (full = fast, empty = slow)
+// ---------------------------------------------------------------------------
+
+function PingMetric({ ping, t }) {
+  const hasValue = ping != null;
+  const color = !hasValue ? t.textFaint
+    : ping < 100  ? '#4ade80'
+    : ping < 300  ? '#fbbf24'
+    :               '#f87171';
+  // Inverted: 0ms = 100% bar, 1000ms+ = ~0% bar
+  const barPct = hasValue ? Math.max(3, 100 - Math.min(100, (ping / 1000) * 100)) : 0;
+
+  return (
+    <div className="px-3 py-3" style={{ backgroundColor: t.cardBg }}>
+      <div className="text-xs font-mono uppercase tracking-wider mb-1.5"
+        style={{ color: t.textFaint }}>
+        Ping
+      </div>
+      <div className="text-lg font-mono font-bold leading-none mb-2"
+        style={{ color: hasValue ? color : t.textFaint }}>
+        {hasValue ? `${ping}ms` : '—'}
+      </div>
+      <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: t.metricGap }}>
+        <div className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${barPct}%`, backgroundColor: hasValue ? color : 'transparent' }} />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Uptime metric cell — bar fills with uptime %
+// ---------------------------------------------------------------------------
+
+function UptimeMetric({ uptimePercent, hasHistory, t }) {
+  const color = !hasHistory ? t.textFaint
+    : uptimePercent >= 99 ? '#4ade80'
+    : uptimePercent >= 95 ? '#fbbf24'
+    :                       '#f87171';
+  const barPct = hasHistory ? uptimePercent : 0;
+
+  return (
+    <div className="px-3 py-3" style={{ backgroundColor: t.cardBg }}>
+      <div className="text-xs font-mono uppercase tracking-wider mb-1.5"
+        style={{ color: t.textFaint }}>
+        Uptime
+      </div>
+      <div className="text-lg font-mono font-bold leading-none mb-2"
+        style={{ color: hasHistory ? color : t.textFaint }}>
+        {hasHistory ? `${uptimePercent}%` : '—'}
+      </div>
+      <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: t.metricGap }}>
+        <div className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${barPct}%`, backgroundColor: hasHistory ? color : 'transparent' }} />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // MonitorCard
 // ---------------------------------------------------------------------------
 
 function MonitorCardInner({
   monitor, onEdit, onDelete, onEmbed, compact = false,
-  // Drag-and-drop props (optional — only passed when dragging is enabled)
   dragHandleProps, isDragging = false,
-  // Width control (optional — 1 = single col, 2 = double col)
   width = 1, onSetWidth,
-  // Chart Y-axis scale: 'auto' | '250' | '500' | '750'
   chartYMax = 'auto',
 }) {
   const { t, isDark } = useTheme();
   const chartRef = useRef(null);
 
-  // Stable tooltip renderer that closes over chartRef — avoids creating a new
-  // function on every render which would cause Recharts to remount the tooltip.
   const tooltipContent = useMemo(
     () => (props) => <SparkTooltip {...props} containerRef={chartRef} />,
-    [] // chartRef is a stable object
+    []
   );
 
   const chartData = monitor.history.map((h, i) => ({
@@ -248,7 +297,6 @@ function MonitorCardInner({
     ttfbMs:    h.ttfbMs,
   }));
 
-  // Derive display status — server only stores 'up'/'down'; compute 'degraded' here
   const displayStatus =
     monitor.status === 'up' &&
     monitor.degradedThreshold != null &&
@@ -260,22 +308,15 @@ function MonitorCardInner({
   const lineColor  = displayStatus === 'down' ? '#ef4444' : displayStatus === 'degraded' ? '#f59e0b' : '#22c55e';
   const gradientId = `spark-${monitor.id}`;
 
-  const uptimeColor =
-    monitor.history.length === 0  ? t.textFaint :
-    monitor.uptimePercent >= 99   ? '#4ade80' :
-    monitor.uptimePercent >= 95   ? '#fbbf24' : '#f87171';
-
   const alertBadges = monitor.alertTypes?.filter(a => a !== 'None') ?? [];
 
   const cardShadow = isDark
     ? '0 2px 8px rgba(0,0,0,0.3)'
     : '0 1px 4px rgba(0,0,0,0.07)';
 
-  // Y-axis domain — fixed max when set, otherwise auto-scale from 0
   const yMax    = chartYMax === 'auto' ? 'auto' : Number(chartYMax);
   const yDomain = [0, yMax];
 
-  // Show the degraded threshold line only for HTTP/API monitors that have one set
   const showThresholdLine =
     monitor.degradedThreshold != null &&
     (monitor.checkType === 'http' || monitor.checkType === 'api');
@@ -349,110 +390,116 @@ function MonitorCardInner({
         boxShadow: cardShadow,
       }}>
 
-      {/* ── Header — entire area is the drag handle when dragging is enabled ── */}
+      {/* ── Header — drag handle + action buttons ── */}
       <div
-        className="flex items-start justify-between px-4 pt-4 pb-2 gap-2 rounded-t-lg"
+        className="px-4 pt-4 pb-2 rounded-t-lg"
         style={{ cursor: dragHandleProps ? 'grab' : 'default' }}
         {...(dragHandleProps || {})}>
 
-        <div className="flex items-center gap-2 min-w-0 flex-1" style={{ pointerEvents: 'none' }}>
-          <StatusBadge status={displayStatus} />
-          <CheckTypeBadge checkType={monitor.checkType} />
-          <span className="text-sm font-semibold truncate" title={monitor.label}
+        {/* Row 1: status/type badges + action buttons */}
+        <div className="flex items-center justify-between gap-2 mb-2"
+          style={{ pointerEvents: 'none' }}>
+
+          <div className="flex items-center gap-2">
+            <StatusBadge status={displayStatus} />
+            <CheckTypeBadge checkType={monitor.checkType} />
+          </div>
+
+          {/* Action buttons — pointer events restored */}
+          <div className="flex items-center gap-1 shrink-0" style={{ pointerEvents: 'all' }}
+            onPointerDown={e => e.stopPropagation()}>
+            {onEmbed && (
+              <button onClick={() => onEmbed(monitor)} title="Embed"
+                className="p-2 rounded transition-opacity opacity-40 hover:opacity-100"
+                style={{ color: t.textSecondary }}>
+                <Code size={13} />
+              </button>
+            )}
+            {onEdit && (
+              <button onClick={() => onEdit(monitor)} title="Edit"
+                className="p-2 rounded transition-opacity opacity-40 hover:opacity-100"
+                style={{ color: t.textSecondary }}>
+                <Edit2 size={13} />
+              </button>
+            )}
+            {onDelete && (
+              <button onClick={() => onDelete(monitor.id)} title="Delete"
+                className="p-2 rounded transition-all opacity-40 hover:opacity-100"
+                style={{ color: t.textSecondary }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.backgroundColor = 'rgba(248,113,113,0.1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = t.textSecondary; e.currentTarget.style.backgroundColor = ''; }}>
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: label — prominent, right above target */}
+        <div style={{ pointerEvents: 'none' }}>
+          <span className="text-sm font-semibold leading-snug block truncate"
+            title={monitor.label}
             style={{ color: t.textPrimary }}>
             {monitor.label}
           </span>
         </div>
+      </div>
 
-        {/* Action buttons — need pointer-events restored so clicks still work */}
-        <div className="flex items-center gap-1 shrink-0" style={{ pointerEvents: 'all' }}
-          onPointerDown={e => e.stopPropagation()}>
-
-          {/* Width toggle — two chips, active one highlighted; hidden on mobile */}
-          {onSetWidth && (
-            <div className="hidden sm:flex items-center rounded border overflow-hidden text-xs font-mono"
-              style={{ borderColor: t.cardBorder }}>
-              {[{ value: 1, label: 'Narrow', Icon: Minimize2 }, { value: 2, label: 'Wide', Icon: ArrowLeftRight }].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => onSetWidth(opt.value)}
-                  title={opt.label}
-                  className="flex items-center gap-1 px-2 py-1 transition-all"
-                  style={width === opt.value ? {
-                    color:           '#60a5fa',
-                    backgroundColor: 'rgba(96,165,250,0.15)',
-                  } : {
-                    color:           t.textMuted,
-                    backgroundColor: 'transparent',
-                  }}>
-                  <opt.Icon size={10} />
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {onEmbed && (
-            <button onClick={() => onEmbed(monitor)} title="Embed"
-              className="p-2 rounded transition-opacity opacity-40 hover:opacity-100"
-              style={{ color: t.textSecondary }}>
-              <Code size={13} />
-            </button>
-          )}
-          {onEdit && (
-            <button onClick={() => onEdit(monitor)} title="Edit"
-              className="p-2 rounded transition-opacity opacity-40 hover:opacity-100"
-              style={{ color: t.textSecondary }}>
-              <Edit2 size={13} />
-            </button>
-          )}
-          {onDelete && (
-            <button onClick={() => onDelete(monitor.id)} title="Delete"
-              className="p-2 rounded transition-all opacity-40 hover:opacity-100"
-              style={{ color: t.textSecondary }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.backgroundColor = 'rgba(248,113,113,0.1)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = t.textSecondary; e.currentTarget.style.backgroundColor = ''; }}>
-              <Trash2 size={13} />
-            </button>
+      {/* ── Target row + narrow/wide toggle ── */}
+      <div className="px-4 pb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-0 min-w-0 flex-1">
+          <span className="text-xs font-mono truncate" style={{ color: t.textMuted }}>
+            {monitor.target}
+            {monitor.port && (
+              <span style={{ color: t.textFaint }}>:{monitor.port}</span>
+            )}
+          </span>
+          {monitor.description && (
+            <span className="text-xs ml-2 shrink-0" style={{ color: t.textFaint }}>
+              — {monitor.description}
+            </span>
           )}
         </div>
+
+        {/* Width toggle — moved here, below action buttons */}
+        {onSetWidth && (
+          <div className="hidden sm:flex items-center rounded border overflow-hidden text-xs font-mono shrink-0"
+            style={{ borderColor: t.cardBorder }}
+            onPointerDown={e => e.stopPropagation()}>
+            {[{ value: 1, label: 'Narrow', Icon: Minimize2 }, { value: 2, label: 'Wide', Icon: ArrowLeftRight }].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => onSetWidth(opt.value)}
+                title={opt.label}
+                className="flex items-center gap-1 px-2 py-1 transition-all"
+                style={width === opt.value ? {
+                  color:           '#60a5fa',
+                  backgroundColor: 'rgba(96,165,250,0.15)',
+                } : {
+                  color:           t.textMuted,
+                  backgroundColor: 'transparent',
+                }}>
+                <opt.Icon size={10} />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Target + description */}
-      <div className="px-4 pb-3 leading-none">
-        <span className="text-xs font-mono" style={{ color: t.textMuted }}>
-          {monitor.target}
-        </span>
-        {monitor.port && (
-          <span className="text-xs font-mono" style={{ color: t.textFaint }}>
-            :{monitor.port}
-          </span>
-        )}
-        {monitor.description && (
-          <span className="text-xs ml-2" style={{ color: t.textFaint }}>
-            — {monitor.description}
-          </span>
-        )}
-      </div>
-
-      {/* ── Metrics row ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-px border-t border-b"
+      {/* ── Metrics row: ping + uptime with progress bars ── */}
+      <div className="grid grid-cols-2 gap-px border-t border-b"
         style={{ backgroundColor: t.metricGap, borderColor: t.metricGap }}>
-        <Metric label="Ping"
-          value={monitor.currentPing != null ? `${monitor.currentPing}ms` : '—'}
-          valueStyle={{ color: t.textPrimary }} t={t} />
-        <Metric label="Uptime"
-          value={monitor.history.length > 0 ? `${monitor.uptimePercent}%` : '—'}
-          valueStyle={{ color: uptimeColor }} t={t} />
-        <Metric label="Every"
-          value={formatInterval(monitor.interval)}
-          valueStyle={{ color: t.textSecondary }} t={t} />
+        <PingMetric ping={monitor.currentPing} t={t} />
+        <UptimeMetric
+          uptimePercent={monitor.uptimePercent}
+          hasHistory={monitor.history.length > 0}
+          t={t} />
       </div>
 
-      {/* ── Timing breakdown (HTTP / API) ───────────────────────────────────── */}
+      {/* ── Timing breakdown (HTTP / API) ── */}
       <TimingRow latest={monitor.latest} />
 
-      {/* ── Assertion error hint (API checks) ───────────────────────────────── */}
+      {/* ── Assertion error hint (API checks) ── */}
       {monitor.status === 'down' && monitor.latest?.error && (
         <div className="px-3 pb-2">
           <span className="text-xs font-mono leading-relaxed line-clamp-2" style={{ color: '#f87171' }}
@@ -462,7 +509,7 @@ function MonitorCardInner({
         </div>
       )}
 
-      {/* ── Sparkline ────────────────────────────────────────────────────────── */}
+      {/* ── Sparkline ── */}
       <div className="px-2 py-2">
         {chartData.length > 0 ? (
           <div ref={chartRef} style={{ width: '100%', height: 68 }}>
@@ -503,7 +550,7 @@ function MonitorCardInner({
         )}
       </div>
 
-      {/* ── Footer ───────────────────────────────────────────────────────────── */}
+      {/* ── Footer ── */}
       <div className="px-4 pb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-auto">
         <div className="flex items-center gap-2 mr-auto">
           <span className="text-xs font-mono" style={{ color: t.textFaint }}>
@@ -513,6 +560,9 @@ function MonitorCardInner({
                 {formatTimestamp(monitor.lastChecked)}
               </>
             ) : 'not yet checked'}
+          </span>
+          <span className="text-xs font-mono" style={{ color: t.textFaint }}>
+            · {formatInterval(monitor.interval)}
           </span>
           <CertBadge certDays={monitor.latest?.certDays} />
         </div>
@@ -538,8 +588,6 @@ function MonitorCardInner({
   );
 }
 
-// Only re-render when the monitor data itself changes (SSE updates preserve
-// object identity for unchanged monitors), or when display-affecting props change.
 export const MonitorCard = React.memo(MonitorCardInner, (prev, next) =>
   prev.monitor    === next.monitor    &&
   prev.chartYMax  === next.chartYMax  &&
@@ -547,21 +595,3 @@ export const MonitorCard = React.memo(MonitorCardInner, (prev, next) =>
   prev.isDragging === next.isDragging &&
   prev.compact    === next.compact
 );
-
-// ---------------------------------------------------------------------------
-// Metric cell
-// ---------------------------------------------------------------------------
-
-function Metric({ label, value, valueStyle, t }) {
-  return (
-    <div className="px-3 py-2.5" style={{ backgroundColor: t.cardBg }}>
-      <div className="text-xs font-mono uppercase tracking-wider mb-0.5"
-        style={{ color: t.textFaint }}>
-        {label}
-      </div>
-      <div className="text-base font-mono font-bold leading-none" style={valueStyle}>
-        {value}
-      </div>
-    </div>
-  );
-}

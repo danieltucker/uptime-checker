@@ -87,6 +87,15 @@ db.exec(`
     enabled     INTEGER NOT NULL DEFAULT 1,
     created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS api_keys (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    key_prefix   TEXT NOT NULL,
+    key_hash     TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    last_used_at TEXT
+  );
 `);
 
 // ── Migrations for existing databases ─────────────────────────────────────────

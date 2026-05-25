@@ -17,6 +17,7 @@ import { useTheme }            from './hooks/useTheme';
 import { useCardLayout }       from './hooks/useCardLayout';
 import { useModuleInstances }  from './hooks/useModuleInstances';
 import { SummaryBar }          from './components/SummaryBar';
+import { ConsolePanel }        from './components/ConsolePanel';
 import { MonitorCard }         from './components/MonitorCard';
 import { ModuleCard }          from './components/ModuleCard';
 import { MonitorForm }         from './components/MonitorForm';
@@ -80,7 +81,7 @@ export default function App() {
     catch { return '1h'; }
   });
 
-  const { monitors, loading, error, addMonitor, updateMonitor, deleteMonitor } = useMonitors(historyWindow);
+  const { monitors, loading, error, addMonitor, updateMonitor, deleteMonitor, refresh } = useMonitors(historyWindow);
 
   const { alerts, dismiss: dismissAlert, dismissAll } = useAlerts();
   const { instances, addInstance, updateInstance, deleteInstance } = useModuleInstances();
@@ -220,6 +221,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: t.pageBg, color: t.textPrimary }}>
+
+      {/* ── Console (always mounted, toggled with `) ─────────────────────────── */}
+      <ConsolePanel monitors={monitors} onRefresh={refresh} />
 
       {/* ── Page-level error toast ───────────────────────────────────────────── */}
       {pageError && (

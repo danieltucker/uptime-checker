@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2, Plus, Wifi, Globe, Terminal, Palette } from 'lucide-react';
+import { X, ChevronLeft, Send, CheckCircle, AlertCircle, Loader, Bell, Settings2, SlidersHorizontal, Puzzle, ExternalLink, FileBarChart2, Plus, Wifi, Globe, Terminal, Palette, Key, Copy, RefreshCw, Trash2 } from 'lucide-react';
 import { useTheme, THEMES } from '../hooks/useTheme';
 import { moduleRegistry } from '../modules/index.js';
 import { NETWORK_REF_PRESETS, DEFAULT_NETWORK_REFS_ENABLED } from '../types/networkRefs.js';
@@ -21,6 +21,7 @@ const TABS = [
   { id: 'reports',       label: 'Reports',        Icon: FileBarChart2  },
   { id: 'network',       label: 'Network',        Icon: Wifi           },
   { id: 'modules',       label: 'Modules',        Icon: Puzzle         },
+  { id: 'api-keys',      label: 'API Keys',       Icon: Key            },
 ];
 
 // Required fields per channel — used for pre-save validation
@@ -249,6 +250,7 @@ export function SettingsPanel({ onClose, chartYMax = 'auto', onChartYMaxChange }
     activeTab === 'notifications' ? 'Configure alert delivery channels'         :
     activeTab === 'reports'       ? 'Schedule periodic email status reports'    :
     activeTab === 'network'       ? 'Configure network reference monitors'      :
+    activeTab === 'api-keys'      ? 'Manage API keys for external integrations' :
                                     'Install modules and manage credentials';
 
   return (
@@ -426,6 +428,9 @@ export function SettingsPanel({ onClose, chartYMax = 'auto', onChartYMaxChange }
                 t={t}
                 isDark={isDark}
               />
+            )}
+            {activeTab === 'api-keys' && (
+              <ApiKeysTab t={t} isDark={isDark} />
             )}
             {activeTab === 'notifications' && (
               <NotificationsTab
@@ -1482,6 +1487,248 @@ function NetworkTab({ networkRefsEnabled, setNetworkRefsEnabled, networkRefsCust
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── API Keys tab ──────────────────────────────────────────────────────────────
+
+function ApiKeysTab({ t, isDark }) {
+  const [keys,        setKeys]        = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [newName,     setNewName]     = useState('');
+  const [creating,    setCreating]    = useState(false);
+  const [revealedKey, setRevealedKey] = useState(null); // { id, key, name }
+  const [copied,      setCopied]      = useState(false);
+  const [error,       setError]       = useState('');
+
+  const rowBg = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+
+  useEffect(() => {
+    fetch('/api/keys')
+      .then(r => r.json())
+      .then(data => { setKeys(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const generate = async () => {
+    if (!newName.trim()) { setError('Enter a name for the key'); return; }
+    setError('');
+    setCreating(true);
+    try {
+      const res  = await fetch('/api/keys', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ name: newName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create key');
+      setKeys(prev => [{ id: data.id, name: data.name, key_prefix: data.key_prefix, created_at: data.created_at, last_used_at: null }, ...prev]);
+      setRevealedKey({ id: data.id, key: data.key, name: data.name });
+      setNewName('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const revoke = async (id) => {
+    try {
+      await fetch(`/api/keys/${id}`, { method: 'DELETE' });
+      setKeys(prev => prev.filter(k => k.id !== id));
+      if (revealedKey?.id === id) setRevealedKey(null);
+    } catch { /* ignore */ }
+  };
+
+  const rotate = async (id) => {
+    try {
+      const res  = await fetch(`/api/keys/${id}/refresh`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    '{}',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setKeys(prev => prev.map(k => k.id === id ? { ...k, key_prefix: data.key_prefix, last_used_at: null } : k));
+      setRevealedKey({ id: data.id, key: data.key, name: data.name });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const copyKey = async () => {
+    if (!revealedKey) return;
+    try {
+      await navigator.clipboard.writeText(revealedKey.key);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  };
+
+  const fmtDate = (iso) => {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return iso; }
+  };
+
+  return (
+    <div className="space-y-5">
+
+      {/* Revealed key banner */}
+      {revealedKey && (
+        <div className="rounded-xl border p-4 space-y-3"
+          style={{ borderColor: '#d97706', backgroundColor: isDark ? 'rgba(217,119,6,0.08)' : 'rgba(217,119,6,0.06)' }}>
+          <div className="flex items-center gap-2">
+            <AlertCircle size={13} style={{ color: '#d97706', flexShrink: 0 }} />
+            <span className="text-xs font-mono font-semibold" style={{ color: '#d97706' }}>
+              Copy this key now — it will not be shown again
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs font-mono px-3 py-2 rounded-lg break-all select-all"
+              style={{ backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.06)', color: t.textPrimary }}>
+              {revealedKey.key}
+            </code>
+            <button
+              onClick={copyKey}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-mono font-medium shrink-0 transition-colors"
+              style={{
+                borderColor:     copied ? '#22c55e' : t.cardBorder,
+                color:           copied ? '#22c55e' : t.textSecondary,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+              }}>
+              {copied ? <CheckCircle size={12} /> : <Copy size={12} />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <button
+            onClick={() => setRevealedKey(null)}
+            className="text-xs font-mono"
+            style={{ color: t.textFaint }}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Generate new key */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: t.cardBorder }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: rowBg, borderColor: t.cardBorder }}>
+          <div className="text-xs font-mono font-semibold uppercase tracking-wider" style={{ color: t.textSecondary }}>
+            Generate New Key
+          </div>
+        </div>
+        <div className="px-5 py-4 space-y-3" style={{ backgroundColor: t.cardBg }}>
+          <div className="flex gap-2">
+            <input
+              value={newName}
+              onChange={e => { setNewName(e.target.value); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && generate()}
+              placeholder="Key name (e.g. Grafana, Home Assistant)"
+              className="flex-1 rounded-lg border px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/60"
+              style={{ backgroundColor: t.inputBg, color: t.textPrimary, borderColor: error ? '#ef4444' : t.cardBorder }}
+            />
+            <button
+              onClick={generate}
+              disabled={creating}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-mono font-bold transition-all disabled:opacity-60 shrink-0"
+              style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: '#fff' }}>
+              {creating ? <Loader size={13} className="animate-spin" /> : <Key size={13} />}
+              Generate
+            </button>
+          </div>
+          {error && (
+            <div className="flex items-center gap-1.5 text-xs font-mono text-red-400">
+              <AlertCircle size={11} className="shrink-0" /> {error}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Key list */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: t.cardBorder }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: rowBg, borderColor: t.cardBorder }}>
+          <div className="text-xs font-mono font-semibold uppercase tracking-wider" style={{ color: t.textSecondary }}>
+            Active Keys
+          </div>
+        </div>
+        <div style={{ backgroundColor: t.cardBg }}>
+          {loading ? (
+            <div className="px-5 py-4 flex items-center gap-2 text-xs font-mono" style={{ color: t.textFaint }}>
+              <Loader size={13} className="animate-spin" /> Loading…
+            </div>
+          ) : keys.length === 0 ? (
+            <div className="px-5 py-4 text-xs font-mono" style={{ color: t.textFaint }}>
+              No API keys yet. Generate one above.
+            </div>
+          ) : keys.map((k, i) => (
+            <div
+              key={k.id}
+              className="flex items-center gap-3 px-5 py-3"
+              style={{ borderBottom: i < keys.length - 1 ? `1px solid ${t.cardBorder}` : 'none' }}>
+              <Key size={13} style={{ color: t.textFaint, flexShrink: 0 }} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-mono font-medium" style={{ color: t.textPrimary }}>{k.name}</div>
+                <div className="text-xs font-mono" style={{ color: t.textMuted }}>
+                  <span className="font-mono" style={{ color: t.textFaint }}>{k.key_prefix}…</span>
+                  {' · '}Created {fmtDate(k.created_at)}
+                  {k.last_used_at ? ` · Last used ${fmtDate(k.last_used_at)}` : ' · Never used'}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => rotate(k.id)}
+                  title="Rotate key"
+                  className="flex items-center justify-center w-7 h-7 rounded-lg border transition-colors"
+                  style={{ borderColor: t.cardBorder, color: t.textMuted, backgroundColor: 'transparent' }}>
+                  <RefreshCw size={12} />
+                </button>
+                <button
+                  onClick={() => revoke(k.id)}
+                  title="Revoke key"
+                  className="flex items-center justify-center w-7 h-7 rounded-lg border transition-colors"
+                  style={{ borderColor: t.cardBorder, color: '#f87171', backgroundColor: 'transparent' }}>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Endpoint reference */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: t.cardBorder }}>
+        <div className="px-5 py-3 border-b" style={{ backgroundColor: rowBg, borderColor: t.cardBorder }}>
+          <div className="text-xs font-mono font-semibold uppercase tracking-wider" style={{ color: t.textSecondary }}>
+            API Endpoints
+          </div>
+        </div>
+        <div className="divide-y" style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder }}>
+          {[
+            { method: 'GET', path: '/api/v1/monitors',     desc: 'All monitors with current status' },
+            { method: 'GET', path: '/api/v1/monitors/:id', desc: 'Single monitor + last 100 history entries' },
+            { method: 'GET', path: '/api/v1/summary',      desc: 'Aggregate counts and average ping' },
+            { method: 'GET', path: '/api/v1/metrics',      desc: 'Prometheus exposition format (Grafana)' },
+          ].map(({ method, path, desc }) => (
+            <div key={path} className="flex items-center gap-3 px-5 py-3"
+              style={{ borderColor: t.cardBorder }}>
+              <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded" style={{ color: '#34d399', backgroundColor: isDark ? 'rgba(52,211,153,0.1)' : 'rgba(52,211,153,0.12)' }}>
+                {method}
+              </span>
+              <code className="text-xs font-mono flex-1 min-w-0 truncate" style={{ color: t.textSecondary }}>
+                {path}
+              </code>
+              <span className="text-xs font-mono hidden sm:block shrink-0" style={{ color: t.textFaint }}>
+                {desc}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t text-xs font-mono" style={{ borderColor: t.cardBorder, color: t.textFaint }}>
+          Authenticate with <code style={{ color: t.textMuted }}>Authorization: Bearer &lt;key&gt;</code> or <code style={{ color: t.textMuted }}>?api_key=&lt;key&gt;</code>
+        </div>
+      </div>
+
     </div>
   );
 }
