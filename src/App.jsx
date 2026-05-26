@@ -25,11 +25,12 @@ import { ModuleInstanceForm }  from './components/ModuleInstanceForm';
 import { AlertsPanel }         from './components/AlertsPanel';
 import { SettingsPanel }       from './components/SettingsPanel';
 import { EmbedModal }          from './components/EmbedModal';
+import { MonitorDetailModal }  from './components/MonitorDetailModal';
 import { moduleRegistry }      from './modules/index.js';
 
 // ── Sortable card wrapper ─────────────────────────────────────────────────────
 
-function SortableMonitorCard({ monitor, onEdit, onDelete, onEmbed, width, onSetWidth, sortEnabled, chartYMax }) {
+function SortableMonitorCard({ monitor, onEdit, onCardClick, width, sortEnabled, chartYMax }) {
   const id = String(monitor.id);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -46,10 +47,7 @@ function SortableMonitorCard({ monitor, onEdit, onDelete, onEmbed, width, onSetW
       <MonitorCard
         monitor={monitor}
         onEdit={onEdit}
-        onDelete={onDelete}
-        onEmbed={onEmbed}
-        width={width}
-        onSetWidth={onSetWidth}
+        onCardClick={onCardClick}
         dragHandleProps={sortEnabled ? { ...attributes, ...listeners } : undefined}
         isDragging={isDragging}
         chartYMax={chartYMax}
@@ -63,6 +61,7 @@ const HISTORY_OPTIONS = [
   { label: '12h', value: '12h' },
   { label: '1d',  value: '1d'  },
   { label: '1w',  value: '1w'  },
+  { label: '30d', value: '30d' },
 ];
 
 const SORT_OPTIONS = [
@@ -87,10 +86,11 @@ export default function App() {
   const { instances, addInstance, updateInstance, deleteInstance } = useModuleInstances();
 
   const [showForm,       setShowForm]       = useState(false);
-  const [editingMonitor, setEditingMonitor] = useState(null);
   const [submitting,     setSubmitting]     = useState(false);
   const [formError,      setFormError]      = useState('');
   const [pageError,      setPageError]      = useState('');
+  const [detailMonitor,  setDetailMonitor]  = useState(null);
+  const [detailTab,      setDetailTab]      = useState('history');
   const [addingFor,      setAddingFor]      = useState(null); // moduleId for new instance form
   const [instanceSubmitting, setInstanceSubmitting] = useState(false);
   const [instanceError,  setInstanceError]  = useState('');
@@ -167,9 +167,12 @@ export default function App() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const openAdd  = () => { setEditingMonitor(null); setFormError(''); setShowForm(true); };
-  const openEdit = useCallback((m) => { setEditingMonitor(m); setFormError(''); setShowForm(true); }, []);
-  const closeForm = () => { setShowForm(false); setEditingMonitor(null); setFormError(''); };
+  const openAdd    = () => { setFormError(''); setShowForm(true); };
+  const closeForm  = () => { setShowForm(false); setFormError(''); };
+  const openDetail = useCallback((m, tab = 'history') => {
+    setDetailMonitor(m);
+    setDetailTab(tab);
+  }, []);
 
   const handleAddModule = (moduleId) => {
     closeForm();
@@ -194,7 +197,7 @@ export default function App() {
     setSubmitting(true);
     setFormError('');
     try {
-      editingMonitor ? await updateMonitor(editingMonitor.id, data) : await addMonitor(data);
+      await addMonitor(data);
       closeForm();
     } catch (err) {
       console.error('[watchtower] save failed:', err);
@@ -203,16 +206,6 @@ export default function App() {
       setSubmitting(false);
     }
   };
-
-  const handleDelete = useCallback(async (id) => {
-    if (!window.confirm('Delete this monitor? This cannot be undone.')) return;
-    try { await deleteMonitor(id); }
-    catch (err) {
-      console.error('[watchtower] delete failed:', err);
-      setPageError(`Failed to delete monitor: ${err.message}`);
-      setTimeout(() => setPageError(''), 6000);
-    }
-  }, [deleteMonitor]);
 
   const toggleTag = (tag) =>
     setTagFilter(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
@@ -466,11 +459,9 @@ export default function App() {
                       <SortableMonitorCard
                         key={m.id}
                         monitor={m}
-                        onEdit={openEdit}
-                        onDelete={handleDelete}
-                        onEmbed={m => setEmbedMonitor(m)}
+                        onEdit={mon => openDetail(mon, 'edit')}
+                        onCardClick={mon => openDetail(mon, 'history')}
                         width={getWidth(m.id)}
-                        onSetWidth={(w) => setWidth(m.id, w)}
                         sortEnabled={sortEnabled}
                         chartYMax={chartYMax}
                       />
@@ -520,8 +511,6 @@ export default function App() {
                     <MonitorCard
                       key={m.id}
                       monitor={m}
-                      onEdit={null}
-                      onDelete={null}
                       compact
                     />
                   ))}
@@ -535,7 +524,7 @@ export default function App() {
       {/* ── Modals / panels ─────────────────────────────────────────────────── */}
       {showForm && (
         <MonitorForm
-          editingMonitor={editingMonitor}
+          editingMonitor={null}
           onSubmit={handleFormSubmit}
           onCancel={closeForm}
           submitting={submitting}
@@ -582,6 +571,19 @@ export default function App() {
         <EmbedModal
           monitor={embedMonitor}
           onClose={() => setEmbedMonitor(null)}
+        />
+      )}
+
+      {detailMonitor && (
+        <MonitorDetailModal
+          monitor={monitors.find(m => m.id === detailMonitor.id) ?? detailMonitor}
+          initialTab={detailTab}
+          onClose={() => setDetailMonitor(null)}
+          onSave={updateMonitor}
+          onDelete={deleteMonitor}
+          width={getWidth(detailMonitor.id)}
+          onSetWidth={(w) => setWidth(detailMonitor.id, w)}
+          allTags={allTags}
         />
       )}
     </div>

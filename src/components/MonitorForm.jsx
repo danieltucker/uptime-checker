@@ -56,7 +56,7 @@ const DEFAULT_FORM = {
   tagInput:         '',
 };
 
-export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = false, allTags = [], error = '', availableModules = [], onAddModule }) {
+export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = false, allTags = [], error = '', availableModules = [], onAddModule, embedded = false }) {
   const { t } = useTheme();
   const [activeTab,  setActiveTab]  = useState('monitor');
   const [form,       setForm]       = useState(DEFAULT_FORM);
@@ -284,53 +284,11 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
     'focus:outline-none transition-colors appearance-none',
   ].join(' ');
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(2px)' }}
-      onClick={(e) => e.target === e.currentTarget && !submitting && onCancel()}
-    >
-      <div className="w-full max-w-lg rounded-lg shadow-2xl border flex flex-col"
-        style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, maxHeight: 'calc(100vh - 2rem)' }}>
-
-        {/* Header — fixed */}
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0"
-          style={{ borderColor: t.metricGap }}>
-          <h2 className="text-xs font-mono font-bold uppercase tracking-widest"
-            style={{ color: t.textSecondary }}>
-            {isEditing ? '// Edit Monitor' : '// Add'}
-          </h2>
-          <button onClick={onCancel} disabled={submitting}
-            className="p-1.5 rounded transition-colors disabled:opacity-40"
-            style={{ color: t.textFaint }}>
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Tab bar — only show when not editing */}
-        {!isEditing && availableModules.length > 0 && (
-          <div className="flex gap-0 border-b shrink-0" style={{ borderColor: t.metricGap }}>
-            {[{ id: 'monitor', label: 'Monitor' }, { id: 'module', label: 'Module' }].map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className="px-5 py-2.5 text-xs font-mono font-semibold transition-colors border-b-2 -mb-px"
-                style={{
-                  color:          activeTab === tab.id ? '#60a5fa' : t.textMuted,
-                  borderColor:    activeTab === tab.id ? '#60a5fa' : 'transparent',
-                  backgroundColor: 'transparent',
-                }}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+  const formContent = (
+    <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
 
           {/* Module picker — shown when module tab is active */}
-          {activeTab === 'module' && (
+          {!embedded && activeTab === 'module' && (
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
               {availableModules.map(mod => {
                 const Icon = mod.icon;
@@ -368,7 +326,7 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
           )}
 
           {/* Monitor form fields — shown when monitor tab is active */}
-          <div className={`flex-1 overflow-y-auto px-6 py-5 space-y-4 ${activeTab !== 'monitor' ? 'hidden' : ''}`}>
+          <div className={`flex-1 overflow-y-auto px-6 py-5 space-y-4 ${!embedded && activeTab !== 'monitor' ? 'hidden' : ''}`}>
 
           {/* Check type */}
           <Field label="Check Type" t={t}>
@@ -771,19 +729,21 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
           {/* Actions — fixed footer */}
           <div className="flex flex-col gap-2 px-6 py-4 border-t shrink-0"
             style={{ borderColor: t.metricGap }}>
-            {error && activeTab === 'monitor' && (
+            {error && (activeTab === 'monitor' || embedded) && (
               <div className="flex items-start gap-2 text-xs font-mono text-red-400">
                 <AlertCircle size={12} className="shrink-0 mt-0.5" />
                 <span className="leading-relaxed">{error}</span>
               </div>
             )}
             <div className="flex justify-end items-center gap-3">
+            {!embedded && (
             <button type="button" onClick={onCancel} disabled={submitting}
               className="px-4 py-2 text-xs font-mono transition-colors disabled:opacity-40"
               style={{ color: t.textMuted }}>
               Cancel
             </button>
-            {activeTab === 'monitor' && (
+            )}
+            {(activeTab === 'monitor' || embedded) && (
               <button type="submit" disabled={submitting}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-mono font-bold rounded transition-colors">
                 {submitting
@@ -796,7 +756,55 @@ export function MonitorForm({ editingMonitor, onSubmit, onCancel, submitting = f
             )}
             </div>
           </div>
-        </form>
+    </form>
+  );
+
+  if (embedded) return formContent;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(2px)' }}
+      onClick={(e) => e.target === e.currentTarget && !submitting && onCancel()}
+    >
+      <div className="w-full max-w-lg rounded-lg shadow-2xl border flex flex-col"
+        style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, maxHeight: 'calc(100vh - 2rem)' }}>
+
+        {/* Header — fixed */}
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0"
+          style={{ borderColor: t.metricGap }}>
+          <h2 className="text-xs font-mono font-bold uppercase tracking-widest"
+            style={{ color: t.textSecondary }}>
+            {isEditing ? '// Edit Monitor' : '// Add'}
+          </h2>
+          <button onClick={onCancel} disabled={submitting}
+            className="p-1.5 rounded transition-colors disabled:opacity-40"
+            style={{ color: t.textFaint }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tab bar — only show when not editing */}
+        {!isEditing && availableModules.length > 0 && (
+          <div className="flex gap-0 border-b shrink-0" style={{ borderColor: t.metricGap }}>
+            {[{ id: 'monitor', label: 'Monitor' }, { id: 'module', label: 'Module' }].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className="px-5 py-2.5 text-xs font-mono font-semibold transition-colors border-b-2 -mb-px"
+                style={{
+                  color:          activeTab === tab.id ? '#60a5fa' : t.textMuted,
+                  borderColor:    activeTab === tab.id ? '#60a5fa' : 'transparent',
+                  backgroundColor: 'transparent',
+                }}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {formContent}
       </div>
     </div>
   );

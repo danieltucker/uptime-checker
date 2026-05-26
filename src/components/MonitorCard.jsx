@@ -1,28 +1,28 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AreaChart, Area, YAxis, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
-import { Edit2, Trash2, Tag, ShieldCheck, ShieldAlert, Code, ArrowLeftRight, Minimize2 } from 'lucide-react';
+import { Edit2, Tag, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { formatInterval, formatTimestamp, certDaysColor } from '../types/monitor';
 import { useTheme } from '../hooks/useTheme';
 
 // ---------------------------------------------------------------------------
-// Status badge
+// Status dot
 // ---------------------------------------------------------------------------
 
-const STATUS_STYLES = {
-  up:       { label: 'UP',       cls: 'text-green-400 bg-green-400/10 border-green-400/30', dot: false },
-  degraded: { label: 'DEGRADED', cls: 'text-amber-400 bg-amber-400/10 border-amber-400/30', dot: false },
-  down:     { label: 'DOWN',     cls: 'text-red-400   bg-red-400/10   border-red-400/30',   dot: true  },
-  pending:  { label: 'PENDING',  cls: 'text-gray-400  bg-gray-400/10  border-gray-400/30',  dot: false },
+const STATUS_DOT_COLORS = {
+  up:       '#4ade80',
+  degraded: '#fbbf24',
+  down:     '#ef4444',
+  pending:  '#6b7280',
 };
 
-function StatusBadge({ status }) {
-  const { label, cls, dot } = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
+function StatusDot({ status }) {
+  const color = STATUS_DOT_COLORS[status] ?? STATUS_DOT_COLORS.pending;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-mono font-bold tracking-widest ${cls}`}>
-      {dot && <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />}
-      {label}
-    </span>
+    <span
+      className={`w-2 h-2 rounded-full shrink-0${status === 'down' ? ' animate-pulse' : ''}`}
+      style={{ backgroundColor: color }}
+    />
   );
 }
 
@@ -273,13 +273,13 @@ function UptimeMetric({ uptimePercent, hasHistory, t }) {
 // ---------------------------------------------------------------------------
 
 function MonitorCardInner({
-  monitor, onEdit, onDelete, onEmbed, compact = false,
+  monitor, onEdit, onCardClick, compact = false,
   dragHandleProps, isDragging = false,
-  width = 1, onSetWidth,
   chartYMax = 'auto',
 }) {
   const { t, isDark } = useTheme();
   const chartRef = useRef(null);
+  const [hovered, setHovered] = useState(false);
 
   const tooltipContent = useMemo(
     () => (props) => <SparkTooltip {...props} containerRef={chartRef} />,
@@ -328,7 +328,7 @@ function MonitorCardInner({
         style={{ backgroundColor: t.cardBg, borderColor: t.cardBorder, boxShadow: cardShadow }}>
 
         <div className="flex items-center justify-between px-3 pt-3 pb-1.5 gap-1.5">
-          <StatusBadge status={displayStatus} />
+          <StatusDot status={displayStatus} />
           <span className="text-xs font-mono truncate font-semibold flex-1 ml-1"
             style={{ color: t.textSecondary }}>
             {monitor.label}
@@ -380,109 +380,63 @@ function MonitorCardInner({
     );
   }
 
+  const hoverBg          = isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.015)';
+  const hoverBorderColor = isDark ? 'rgba(255,255,255,0.15)'  : 'rgba(0,0,0,0.15)';
+
   // ── Full layout ───────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col rounded-lg border transition-colors"
+    <div
+      className="flex flex-col rounded-lg border transition-colors cursor-pointer"
       style={{
-        backgroundColor: t.cardBg,
-        borderColor: isDragging ? t.cardBorderHover : t.cardBorder,
-        opacity: isDragging ? 0.85 : 1,
-        boxShadow: cardShadow,
-      }}>
+        backgroundColor: hovered ? hoverBg : t.cardBg,
+        borderColor:     isDragging ? hoverBorderColor : hovered ? hoverBorderColor : t.cardBorder,
+        opacity:         isDragging ? 0.85 : 1,
+        boxShadow:       cardShadow,
+      }}
+      onClick={() => onCardClick?.(monitor)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}>
 
-      {/* ── Header — drag handle + action buttons ── */}
+      {/* ── Header — drag handle ── */}
       <div
         className="px-4 pt-4 pb-2 rounded-t-lg"
         style={{ cursor: dragHandleProps ? 'grab' : 'default' }}
         {...(dragHandleProps || {})}>
 
-        {/* Row 1: status/type badges + action buttons */}
-        <div className="flex items-center justify-between gap-2 mb-2"
-          style={{ pointerEvents: 'none' }}>
-
-          <div className="flex items-center gap-2">
-            <StatusBadge status={displayStatus} />
-            <CheckTypeBadge checkType={monitor.checkType} />
-          </div>
-
-          {/* Action buttons — pointer events restored */}
-          <div className="flex items-center gap-1 shrink-0" style={{ pointerEvents: 'all' }}
-            onPointerDown={e => e.stopPropagation()}>
-            {onEmbed && (
-              <button onClick={() => onEmbed(monitor)} title="Embed"
-                className="p-2 rounded transition-opacity opacity-40 hover:opacity-100"
-                style={{ color: t.textSecondary }}>
-                <Code size={13} />
-              </button>
-            )}
-            {onEdit && (
-              <button onClick={() => onEdit(monitor)} title="Edit"
-                className="p-2 rounded transition-opacity opacity-40 hover:opacity-100"
-                style={{ color: t.textSecondary }}>
-                <Edit2 size={13} />
-              </button>
-            )}
-            {onDelete && (
-              <button onClick={() => onDelete(monitor.id)} title="Delete"
-                className="p-2 rounded transition-all opacity-40 hover:opacity-100"
-                style={{ color: t.textSecondary }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.backgroundColor = 'rgba(248,113,113,0.1)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = t.textSecondary; e.currentTarget.style.backgroundColor = ''; }}>
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Row 2: label — prominent, right above target */}
-        <div style={{ pointerEvents: 'none' }}>
-          <span className="text-sm font-semibold leading-snug block truncate"
+        {/* Label row: status dot + label + type badge + edit button */}
+        <div className="flex items-center gap-2">
+          <StatusDot status={displayStatus} />
+          <span className="text-sm font-semibold leading-snug flex-1 truncate min-w-0"
             title={monitor.label}
             style={{ color: t.textPrimary }}>
             {monitor.label}
           </span>
+          <CheckTypeBadge checkType={monitor.checkType} />
+          {onEdit && (
+            <button
+              onClick={e => { e.stopPropagation(); onEdit(monitor); }}
+              onPointerDown={e => e.stopPropagation()}
+              title="Edit"
+              className="p-1.5 rounded transition-opacity opacity-40 hover:opacity-100 shrink-0"
+              style={{ color: t.textSecondary }}>
+              <Edit2 size={13} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── Target row + narrow/wide toggle ── */}
-      <div className="px-4 pb-3 flex items-center justify-between gap-2">
-        <div className="flex flex-col min-w-0 flex-1">
-          <span className="text-xs font-mono truncate" style={{ color: t.textMuted }}>
-            {monitor.target}
-            {monitor.port && (
-              <span style={{ color: t.textFaint }}>:{monitor.port}</span>
-            )}
-          </span>
-          {monitor.description && (
-            <span className="text-xs font-mono truncate mt-0.5" style={{ color: t.textFaint }}>
-              {monitor.description}
-            </span>
+      {/* ── Target row ── */}
+      <div className="px-4 pb-3">
+        <span className="text-xs font-mono truncate block" style={{ color: t.textMuted }}>
+          {monitor.target}
+          {monitor.port && (
+            <span style={{ color: t.textFaint }}>:{monitor.port}</span>
           )}
-        </div>
-
-        {/* Width toggle — moved here, below action buttons */}
-        {onSetWidth && (
-          <div className="hidden sm:flex items-center rounded border overflow-hidden text-xs font-mono shrink-0"
-            style={{ borderColor: t.cardBorder }}
-            onPointerDown={e => e.stopPropagation()}>
-            {[{ value: 1, label: 'Narrow', Icon: Minimize2 }, { value: 2, label: 'Wide', Icon: ArrowLeftRight }].map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => onSetWidth(opt.value)}
-                title={opt.label}
-                className="flex items-center gap-1 px-2 py-1 transition-all"
-                style={width === opt.value ? {
-                  color:           '#60a5fa',
-                  backgroundColor: 'rgba(96,165,250,0.15)',
-                } : {
-                  color:           t.textMuted,
-                  backgroundColor: 'transparent',
-                }}>
-                <opt.Icon size={10} />
-                {opt.label}
-              </button>
-            ))}
-          </div>
+        </span>
+        {monitor.description && (
+          <span className="text-xs font-mono truncate block mt-0.5" style={{ color: t.textFaint }}>
+            {monitor.description}
+          </span>
         )}
       </div>
 
@@ -591,7 +545,6 @@ function MonitorCardInner({
 export const MonitorCard = React.memo(MonitorCardInner, (prev, next) =>
   prev.monitor    === next.monitor    &&
   prev.chartYMax  === next.chartYMax  &&
-  prev.width      === next.width      &&
   prev.isDragging === next.isDragging &&
   prev.compact    === next.compact
 );

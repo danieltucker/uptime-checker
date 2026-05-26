@@ -19,6 +19,7 @@ const WINDOWS = {
   '12h': { lookback: '-12 hours', bucketMinutes: 15   },
   '1d':  { lookback: '-1 day',    bucketMinutes: 60   },
   '1w':  { lookback: '-7 days',   bucketMinutes: 360  },
+  '30d': { lookback: '-30 days',  bucketMinutes: 1440 },
 };
 
 // ── Windowed history query ────────────────────────────────────────────────────
