@@ -263,40 +263,316 @@ Embedded views receive live SSE updates and have no edit, delete, or settings co
 
 ## API Reference
 
-| Method | Path                              | Description                                          |
-|--------|-----------------------------------|------------------------------------------------------|
-| GET    | `/api/monitors`                   | List all monitors with history (`?window=1h/12h/1d/1w`) |
-| GET    | `/api/monitors/:id`               | Get a single monitor                                 |
-| POST   | `/api/monitors`                   | Create a monitor                                     |
-| PUT    | `/api/monitors/:id`               | Update a monitor                                     |
-| DELETE | `/api/monitors/:id`               | Delete a monitor                                     |
-| POST   | `/api/monitors/:id/check`         | Trigger an immediate check                           |
-| GET    | `/api/events`                     | SSE stream of live check results                     |
-| GET    | `/api/settings`                   | Get alert channel configuration                      |
-| PUT    | `/api/settings`                   | Save alert channel configuration                     |
-| POST   | `/api/settings/test/:channel`     | Send a test alert (`telegram`, `email`, `twilio`, `webhook`, `report`) |
+WatchTower exposes two HTTP APIs:
 
-### Monitor schema
+- **Public API** (`/api/v1/`) — read-only, requires an API key. Use this to integrate with external tools, dashboards, or scripts.
+- **Internal API** (`/api/`) — full CRUD, no key required. Intended for the dashboard UI on localhost. Restrict access at the network/proxy level if exposed.
 
-| Field         | Type                      | Description                                                        |
-|---------------|---------------------------|--------------------------------------------------------------------|
-| `target`      | string                    | IP address, hostname, or URL                                       |
-| `label`       | string                    | Display name (defaults to target)                                  |
-| `description` | string                    | Optional notes shown on the card                                   |
-| `checkType`   | `http` / `api` / `tcp` / `icmp` | Check strategy                                               |
-| `interval`    | number (seconds)          | How often to run checks (default: 60)                              |
-| `port`        | number                    | Required for TCP checks                                            |
-| `alertTypes`  | string[]                  | `Email`, `SMS`, `Telegram`, `Webhook`, or `None`                   |
-| `tags`        | string[]                  | Freeform labels; `_ref` is reserved for built-in reference monitors |
-| `expectedStatus` | number                 | API checks only — expected HTTP status code (default: 200)         |
-| `bodyMatch`   | string                    | API/HTTP checks — plain string the response body must contain      |
-| `jsonPath`    | string                    | API checks only — dot-notation path to a JSON field (e.g. `data.status`) |
-| `jsonExpected`| string                    | API checks only — expected string value at `jsonPath`              |
-| `authType`    | `none` / `basic` / `bearer` | API checks only — authentication method                          |
-| `authUser`    | string                    | API checks — basic auth username                                   |
-| `authPass`    | string                    | API checks — basic auth password (stored plaintext)               |
-| `authToken`   | string                    | API checks — bearer token (stored plaintext)                      |
-| `headers`     | `{key,value}[]`           | API checks — up to 5 custom request headers                       |
+---
+
+### Authentication
+
+The public API uses bearer token authentication. Generate a key in **Settings → General → API Keys**.
+
+```
+Authorization: Bearer wt_your_api_key_here
+```
+
+Keys are prefixed `wt_` and stored as SHA-256 hashes. The raw key is only shown once at creation.
+
+#### Manage API keys
+
+```
+GET    /api/keys          List keys (returns prefix, not raw value)
+POST   /api/keys          Create a new key
+DELETE /api/keys/:id      Revoke a key
+POST   /api/keys/:id/refresh   Rotate a key (issues a new raw value)
+```
+
+**Create a key**
+```bash
+curl -X POST http://localhost:3000/api/keys \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Grafana integration" }'
+```
+```json
+{
+  "id": "a1b2c3d4-...",
+  "name": "Grafana integration",
+  "key_prefix": "wt_abc123",
+  "created_at": "2025-01-15T10:00:00.000Z",
+  "key": "wt_abc123defghijklmnopqrstuvwxyz0123456789"
+}
+```
+> Save the `key` value — it is not stored and cannot be retrieved again.
+
+---
+
+### Public API — `/api/v1/`
+
+All endpoints require `Authorization: Bearer <key>`.
+
+#### GET /api/v1/monitors
+
+Returns all monitors with their current status, ping, and 24-hour uptime.
+
+```bash
+curl http://localhost:3000/api/v1/monitors \
+  -H "Authorization: Bearer wt_your_key"
+```
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "label": "My API",
+    "target": "https://api.example.com/health",
+    "checkType": "http",
+    "interval": 60,
+    "tags": ["production"],
+    "status": "up",
+    "currentPing": 142,
+    "lastChecked": "2025-01-15T10:05:00.000Z",
+    "uptimePercent": 99.8
+  }
+]
+```
+
+---
+
+#### GET /api/v1/monitors/:id
+
+Returns a single monitor with its last 100 check results.
+
+```bash
+curl http://localhost:3000/api/v1/monitors/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer wt_your_key"
+```
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "label": "My API",
+  "target": "https://api.example.com/health",
+  "checkType": "http",
+  "status": "up",
+  "currentPing": 142,
+  "uptimePercent": 99.8,
+  "lastChecked": "2025-01-15T10:05:00.000Z",
+  "history": [
+    {
+      "timestamp": "2025-01-15T10:05:00.000Z",
+      "status": "up",
+      "ping": 142,
+      "dnsMs": 12,
+      "tcpMs": 28,
+      "tlsMs": 45,
+      "ttfbMs": 98,
+      "httpStatus": 200,
+      "certDays": 72,
+      "error": null
+    }
+  ]
+}
+```
+
+---
+
+#### GET /api/v1/summary
+
+Returns aggregate counts across all monitors.
+
+```bash
+curl http://localhost:3000/api/v1/summary \
+  -H "Authorization: Bearer wt_your_key"
+```
+
+```json
+{
+  "total": 8,
+  "up": 7,
+  "down": 1,
+  "pending": 0,
+  "avgPingMs": 134
+}
+```
+
+---
+
+#### GET /api/v1/metrics
+
+Returns Prometheus-compatible metrics for scraping.
+
+```bash
+curl http://localhost:3000/api/v1/metrics \
+  -H "Authorization: Bearer wt_your_key"
+```
+
+```
+# HELP watchtower_up 1 if the monitor is currently up, 0 if down
+# TYPE watchtower_up gauge
+# HELP watchtower_ping_ms Latest ping in milliseconds
+# TYPE watchtower_ping_ms gauge
+# HELP watchtower_uptime_percent Uptime % over the last 24 hours
+# TYPE watchtower_uptime_percent gauge
+watchtower_up{id="550e8400",label="My API",target="https://api.example.com/health",type="http"} 1
+watchtower_ping_ms{id="550e8400",label="My API",target="https://api.example.com/health",type="http"} 142
+watchtower_uptime_percent{id="550e8400",label="My API",target="https://api.example.com/health",type="http"} 99.8
+```
+
+Add to your `prometheus.yml`:
+```yaml
+scrape_configs:
+  - job_name: watchtower
+    bearer_token: wt_your_key
+    static_configs:
+      - targets: ['localhost:3000']
+    metrics_path: /api/v1/metrics
+```
+
+---
+
+### Internal API — `/api/`
+
+No authentication required. Intended for use on the same host or private network.
+
+#### GET /api/monitors
+
+Returns all monitors with windowed history.
+
+| Query param | Values | Default | Description |
+|---|---|---|---|
+| `window` | `1h` `12h` `1d` `1w` | `1h` | History lookback. Longer windows return bucketed averages. |
+
+```bash
+curl "http://localhost:3000/api/monitors?window=1d"
+```
+
+---
+
+#### POST /api/monitors
+
+Creates a monitor and starts polling immediately.
+
+```bash
+curl -X POST http://localhost:3000/api/monitors \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "My API",
+    "target": "https://api.example.com/health",
+    "checkType": "http",
+    "interval": 60,
+    "tags": ["production"],
+    "alertTypes": ["Telegram"]
+  }'
+```
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "label": "My API",
+  "target": "https://api.example.com/health",
+  "checkType": "http",
+  "interval": 60,
+  "status": "pending",
+  "currentPing": null,
+  "history": []
+}
+```
+
+**Body fields**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `target` | string | ✓ | — | URL, hostname, or IP |
+| `label` | string | | target | Display name |
+| `description` | string | | `""` | Notes shown on the card |
+| `checkType` | `http` `api` `tcp` `icmp` | | `http` | Check strategy |
+| `interval` | integer (seconds) | | `60` | Min `30` |
+| `port` | integer | TCP only | — | Port to probe |
+| `tags` | string[] | | `[]` | Freeform labels |
+| `alertTypes` | string[] | | `["None"]` | `Email` `SMS` `Telegram` `Webhook` `None` |
+| `degradedThreshold` | integer (ms) | | — | Ping above this marks the monitor degraded |
+| `expectedStatus` | integer | API | `200` | Expected HTTP status code |
+| `bodyMatch` | string | | — | String the response body must contain |
+| `jsonPath` | string | API | — | Dot-notation path to a JSON field (e.g. `data.status`) |
+| `jsonExpected` | string | API | — | Expected value at `jsonPath` |
+| `authType` | `none` `basic` `bearer` | API | `none` | Auth method |
+| `authUser` | string | API+basic | — | Basic auth username |
+| `authPass` | string | API+basic | — | Basic auth password |
+| `authToken` | string | API+bearer | — | Bearer token |
+| `requestHeaders` | `{key,value}[]` | API | `[]` | Up to 5 custom request headers |
+
+---
+
+#### PUT /api/monitors/:id
+
+Updates a monitor. All fields are optional — only send what you want to change.
+
+```bash
+curl -X PUT http://localhost:3000/api/monitors/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Content-Type: application/json" \
+  -d '{ "interval": 30, "tags": ["production", "critical"] }'
+```
+
+Returns the updated monitor payload. Passing `"***"` for `authPass` or `authToken` leaves the existing value unchanged.
+
+---
+
+#### DELETE /api/monitors/:id
+
+Stops polling and permanently deletes the monitor and its history.
+
+```bash
+curl -X DELETE http://localhost:3000/api/monitors/550e8400-e29b-41d4-a716-446655440000
+```
+
+Returns `204 No Content`.
+
+---
+
+#### POST /api/monitors/:id/check
+
+Triggers an immediate out-of-schedule check and returns the result.
+
+```bash
+curl -X POST http://localhost:3000/api/monitors/550e8400-e29b-41d4-a716-446655440000/check
+```
+
+```json
+{
+  "status": "up",
+  "total_ms": 138,
+  "dns_ms": 11,
+  "tcp_ms": 25,
+  "tls_ms": 44,
+  "ttfb_ms": 95,
+  "http_status": 200,
+  "cert_days": 72,
+  "error": null
+}
+```
+
+---
+
+#### GET /api/events
+
+Server-Sent Events stream. The dashboard subscribes to this for live updates.
+
+```bash
+curl -N http://localhost:3000/api/events
+```
+
+```
+data: {"type":"check:result","payload":{"id":"550e8400","status":"up","total_ms":142,...}}
+
+data: {"type":"monitor:deleted","payload":{"id":"550e8400"}}
+```
+
+| Event type | Payload | When |
+|---|---|---|
+| `check:result` | Full monitor object | After every scheduled or manual check |
+| `monitor:deleted` | `{ id }` | When a monitor is deleted |
 
 ---
 

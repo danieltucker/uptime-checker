@@ -446,7 +446,7 @@ function MonitorCardInner({
 
       {/* ── Target row + narrow/wide toggle ── */}
       <div className="px-4 pb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-0 min-w-0 flex-1">
+        <div className="flex flex-col min-w-0 flex-1">
           <span className="text-xs font-mono truncate" style={{ color: t.textMuted }}>
             {monitor.target}
             {monitor.port && (
@@ -454,8 +454,8 @@ function MonitorCardInner({
             )}
           </span>
           {monitor.description && (
-            <span className="text-xs ml-2 shrink-0" style={{ color: t.textFaint }}>
-              — {monitor.description}
+            <span className="text-xs font-mono truncate mt-0.5" style={{ color: t.textFaint }}>
+              {monitor.description}
             </span>
           )}
         </div>

@@ -43,6 +43,9 @@ COPY server/src ./src
 # Copy built frontend assets
 COPY --from=frontend /build/server/public ./public
 
+# Remove npm — not needed at runtime, eliminates its bundled CVEs (tar, minimatch, glob, etc.)
+RUN npm uninstall -g npm
+
 # SQLite data directory — mount a volume here for persistence
 ENV DATA_DIR=/app/data
 VOLUME ["/app/data"]
